@@ -16,6 +16,16 @@ import kotlin.math.roundToInt
  * local coordinate origin (x=0, z=0) AND the satellite image's fetch center,
  * so the fetched image and the flight path are automatically aligned without
  * needing to carry lat/lon any further downstream than this one function.
+ *
+ * Axis convention: x = west-positive, y = up (altitude), z = north-positive.
+ * This is intentional, not a typo: with y=up and z=north, a right-handed
+ * frame (the one Three.js's default camera/rendering pipeline assumes)
+ * requires x=west, not x=east. Using x=east here would silently mirror
+ * everything drawn on top of this data (confirmed on real flight data
+ * 2026-09-21 — turns rendered backwards, satellite image text read
+ * backwards, and no camera adjustment could fix it, since a true mirror
+ * reflection can't be undone by rotating the viewpoint). Do not "fix" this
+ * back to x=east without re-verifying against a real recorded route.
  */
 object FlightGeoUtils {
 
@@ -48,7 +58,7 @@ object FlightGeoUtils {
         // ---- local x/y/z rows ----
         val t0 = points.first().timestamp
         val rows = points.map { p ->
-            val x = (p.longitude - originLon) * metersPerDegreeLon
+            val x = (originLon - p.longitude) * metersPerDegreeLon  // west-positive — see axis convention note above
             val z = (p.latitude - originLat) * METERS_PER_DEGREE_LAT
             val y = p.altitudeBaro?.toDouble() ?: p.altitudeGps
             val t = (p.timestamp - t0) / 1000.0

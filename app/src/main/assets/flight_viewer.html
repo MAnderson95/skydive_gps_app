@@ -478,6 +478,10 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     mapTex.minFilter = THREE.LinearFilter;
     mapTex.generateMipmaps = false;
     const mapGeo = new THREE.PlaneGeometry(mapMeta.widthMeters, mapMeta.heightMeters);
+    mapTex.wrapT = THREE.RepeatWrapping;
+    mapTex.wrapS = THREE.RepeatWrapping;
+    mapTex.repeat.y = -1; // the ground plane's rotation otherwise mirrors the image north-south
+    mapTex.repeat.x = -1; // ...and east-west too
     const mapMat = new THREE.MeshBasicMaterial({map: mapTex});
     const mapMesh = new THREE.Mesh(mapGeo, mapMat);
     mapMesh.rotation.x = -Math.PI/2;
