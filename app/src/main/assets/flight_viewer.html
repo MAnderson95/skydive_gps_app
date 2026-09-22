@@ -453,27 +453,36 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, Math.max(20000, diag*8));
 
-  // ground grid, sized to bounding box with margin
+  // ground grid + dark fill plane — only when there's no real map image to
+  // show instead. These used to always render underneath the map image too,
+  // separated from it and from each other by tiny fixed offsets (fine at the
+  // small scale of early test data, but at real-world flight/drive scale
+  // those offsets are far smaller than depth-buffer precision at typical
+  // camera distance, causing visible z-fighting/shimmer between the grid,
+  // the fill, and the map — confirmed on real data 2026-09-21). Simplest
+  // correct fix: when a map image is present, it's the ground — don't also
+  // draw a competing grid and fill plane underneath it.
+  const haveMapImage = !!(mapImageDataUri && mapMeta && mapMeta.widthMeters > 0);
   const gridSize = Math.max(span*1.6, 40);
-  const gridDivisions = 24;
-  const grid = new THREE.GridHelper(gridSize, gridDivisions, 0x2a3b4a, 0x1a2732);
-  grid.position.set(center.x, minY, center.z);
-  scene.add(grid);
+  if (!haveMapImage) {
+    const gridDivisions = 24;
+    const grid = new THREE.GridHelper(gridSize, gridDivisions, 0x2a3b4a, 0x1a2732);
+    grid.position.set(center.x, minY, center.z);
+    scene.add(grid);
 
-  // subtle ground fill plane (very dark, just under grid to stop see-through fog banding)
-  const groundGeo = new THREE.PlaneGeometry(gridSize*1.2, gridSize*1.2);
-  const groundMat = new THREE.MeshBasicMaterial({color:0x0c131b, transparent:true, opacity:0.6});
-  const groundMesh = new THREE.Mesh(groundGeo, groundMat);
-  groundMesh.rotation.x = -Math.PI/2;
-  groundMesh.position.set(center.x, minY - 0.05, center.z);
-  scene.add(groundMesh);
+    // subtle ground fill plane (very dark, just under grid to stop see-through fog banding)
+    const groundGeo = new THREE.PlaneGeometry(gridSize*1.2, gridSize*1.2);
+    const groundMat = new THREE.MeshBasicMaterial({color:0x0c131b, transparent:true, opacity:0.6});
+    const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+    groundMesh.rotation.x = -Math.PI/2;
+    groundMesh.position.set(center.x, minY - 0.05, center.z);
+    scene.add(groundMesh);
+  }
 
   // real satellite imagery, textured under the flight path (optional — only
   // present when the Android app supplied a fetched image + its real-world
-  // size). Sits just above the dark fill plane so it reads cleanly against
-  // it for the area outside the image's coverage; the grid remains layered
-  // above both.
-  if (mapImageDataUri && mapMeta && mapMeta.widthMeters > 0) {
+  // size). When present, it's the sole ground layer (see note above).
+  if (haveMapImage) {
     const mapTex = new THREE.TextureLoader().load(mapImageDataUri);
     mapTex.minFilter = THREE.LinearFilter;
     mapTex.generateMipmaps = false;
