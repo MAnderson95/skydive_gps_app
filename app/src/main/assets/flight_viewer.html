@@ -713,8 +713,12 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   // size). When present, it's the sole ground layer (see note above).
   if (haveMapImage) {
     const mapTex = new THREE.TextureLoader().load(mapImageDataUri);
-    mapTex.minFilter = THREE.LinearFilter;
-    mapTex.generateMipmaps = false;
+    // Mipmaps on + a mip-aware minFilter (LinearFilter alone ignores mips
+    // even if generated) — fixes shimmer/aliasing on the ground plane when
+    // viewed at an angle from the orbit camera. One-time GPU cost at texture
+    // upload, not a per-frame cost, unlike antialiasing/pixelRatio.
+    mapTex.minFilter = THREE.LinearMipmapLinearFilter;
+    mapTex.generateMipmaps = true;
     const mapGeo = new THREE.PlaneGeometry(mapMeta.widthMeters, mapMeta.heightMeters);
     mapTex.wrapT = THREE.RepeatWrapping;
     mapTex.wrapS = THREE.RepeatWrapping;

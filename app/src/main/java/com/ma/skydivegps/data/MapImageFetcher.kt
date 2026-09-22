@@ -36,6 +36,7 @@ object MapImageFetcher {
             "?center=$centerLat,$centerLon" +
             "&zoom=$zoom" +
             "&size=${sizePx}x${sizePx}" +
+            "&scale=2" +
             "&maptype=satellite" +
             "&key=${BuildConfig.MAPS_STATIC_API_KEY}"
 
