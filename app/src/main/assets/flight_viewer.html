@@ -216,7 +216,7 @@
 
   #stats{
     display:grid;
-    grid-template-columns:repeat(4, 1fr);
+    grid-template-columns:repeat(5, 1fr);
     gap:0;
   }
   .stat{
@@ -246,12 +246,236 @@
 
   @media (max-width:420px){
     #stats{grid-template-columns:repeat(2, 1fr); row-gap:8px;}
-    .stat:nth-child(3){border-left:none; padding-left:2px;}
+    .stat:nth-child(2n+1){border-left:none; padding-left:2px;}
   }
 </style>
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(()=>{var o=window.THREE,A=o.ShaderLib,Q=o.ShaderMaterial,L=o.UniformsLib,j=o.UniformsUtils,Y=o.Vector2,z=o.Box3,U=o.InstancedInterleavedBuffer,y=o.InterleavedBufferAttribute,Z=o.Line3,$=o.MathUtils,ee=o.Matrix4,te=o.Mesh,I=o.Sphere,m=o.Vector3,G=o.Vector4,D=o.Float32BufferAttribute,ne=o.InstancedBufferGeometry,ie=o.WireframeGeometry;var re=new z,O=new m,h=class extends ne{constructor(){super(),this.type="LineSegmentsGeometry";let e=[-1,2,0,1,2,0,-1,1,0,1,1,0,-1,0,0,1,0,0,-1,-1,0,1,-1,0],t=[-1,2,1,2,-1,1,1,1,-1,-1,1,-1,-1,-2,1,-2],i=[0,2,1,2,3,1,2,4,3,4,5,3,4,6,5,6,7,5];this.setIndex(i),this.setAttribute("position",new D(e,3)),this.setAttribute("uv",new D(t,2))}applyMatrix4(e){let t=this.attributes.instanceStart,i=this.attributes.instanceEnd;return t!==void 0&&(t.applyMatrix4(e),i.applyMatrix4(e),t.needsUpdate=!0),this.boundingBox!==null&&this.computeBoundingBox(),this.boundingSphere!==null&&this.computeBoundingSphere(),this}setPositions(e){let t;e instanceof Float32Array?t=e:Array.isArray(e)&&(t=new Float32Array(e));let i=new U(t,6,1);return this.setAttribute("instanceStart",new y(i,3,0)),this.setAttribute("instanceEnd",new y(i,3,3)),this.computeBoundingBox(),this.computeBoundingSphere(),this}setColors(e){let t;e instanceof Float32Array?t=e:Array.isArray(e)&&(t=new Float32Array(e));let i=new U(t,6,1);return this.setAttribute("instanceColorStart",new y(i,3,0)),this.setAttribute("instanceColorEnd",new y(i,3,3)),this}fromWireframeGeometry(e){return this.setPositions(e.attributes.position.array),this}fromEdgesGeometry(e){return this.setPositions(e.attributes.position.array),this}fromMesh(e){return this.fromWireframeGeometry(new ie(e.geometry)),this}romLineSegments(e){let t=e.geometry;if(t.isGeometry){console.error("THREE.LineSegmentsGeometry no longer supports Geometry. Use THREE.BufferGeometry instead.");return}else t.isBufferGeometry&&this.setPositions(t.attributes.position.array);return this}computeBoundingBox(){this.boundingBox===null&&(this.boundingBox=new z);let e=this.attributes.instanceStart,t=this.attributes.instanceEnd;e!==void 0&&t!==void 0&&(this.boundingBox.setFromBufferAttribute(e),re.setFromBufferAttribute(t),this.boundingBox.union(re))}computeBoundingSphere(){this.boundingSphere===null&&(this.boundingSphere=new I),this.boundingBox===null&&this.computeBoundingBox();let e=this.attributes.instanceStart,t=this.attributes.instanceEnd;if(e!==void 0&&t!==void 0){let i=this.boundingSphere.center;this.boundingBox.getCenter(i);let n=0;for(let r=0,u=e.count;r<u;r++)O.fromBufferAttribute(e,r),n=Math.max(n,i.distanceToSquared(O)),O.fromBufferAttribute(t,r),n=Math.max(n,i.distanceToSquared(O));this.boundingSphere.radius=Math.sqrt(n),isNaN(this.boundingSphere.radius)&&console.error("THREE.LineSegmentsGeometry.computeBoundingSphere(): Computed radius is NaN. The instanced position data is likely to have NaN values.",this)}}toJSON(){}applyMatrix(e){return console.warn("THREE.LineSegmentsGeometry: applyMatrix() has been renamed to applyMatrix4()."),this.applyMatrix4(e)}};h.prototype.isLineSegmentsGeometry=!0;var w=class extends h{constructor(){super(),this.type="LineGeometry"}setPositions(e){for(var t=e.length-3,i=new Float32Array(2*t),n=0;n<t;n+=3)i[2*n]=e[n],i[2*n+1]=e[n+1],i[2*n+2]=e[n+2],i[2*n+3]=e[n+3],i[2*n+4]=e[n+4],i[2*n+5]=e[n+5];return super.setPositions(i),this}setColors(e){for(var t=e.length-3,i=new Float32Array(2*t),n=0;n<t;n+=3)i[2*n]=e[n],i[2*n+1]=e[n+1],i[2*n+2]=e[n+2],i[2*n+3]=e[n+3],i[2*n+4]=e[n+4],i[2*n+5]=e[n+5];return super.setColors(i),this}fromLine(e){var t=e.geometry;if(t.isGeometry){console.error("THREE.LineGeometry no longer supports Geometry. Use THREE.BufferGeometry instead.");return}else t.isBufferGeometry&&this.setPositions(t.attributes.position.array);return this}copy(){return this}};w.prototype.isLineGeometry=!0;L.line={linewidth:{value:1},resolution:{value:new Y(1,1)},dashScale:{value:1},dashSize:{value:1},dashOffset:{value:0},gapSize:{value:1},opacity:{value:1}};A.line={uniforms:j.merge([L.common,L.fog,L.line]),vertexShader:`
+		#include <common>
+		#include <color_pars_vertex>
+		#include <fog_pars_vertex>
+		#include <logdepthbuf_pars_vertex>
+		#include <clipping_planes_pars_vertex>
+
+		uniform float linewidth;
+		uniform vec2 resolution;
+
+		attribute vec3 instanceStart;
+		attribute vec3 instanceEnd;
+
+		attribute vec3 instanceColorStart;
+		attribute vec3 instanceColorEnd;
+
+		varying vec2 vUv;
+
+		#ifdef USE_DASH
+
+			uniform float dashScale;
+			attribute float instanceDistanceStart;
+			attribute float instanceDistanceEnd;
+			varying float vLineDistance;
+
+		#endif
+
+		void trimSegment( const in vec4 start, inout vec4 end ) {
+
+			// trim end segment so it terminates between the camera plane and the near plane
+
+			// conservative estimate of the near plane
+			float a = projectionMatrix[ 2 ][ 2 ]; // 3nd entry in 3th column
+			float b = projectionMatrix[ 3 ][ 2 ]; // 3nd entry in 4th column
+			float nearEstimate = - 0.5 * b / a;
+
+			float alpha = ( nearEstimate - start.z ) / ( end.z - start.z );
+
+			end.xyz = mix( start.xyz, end.xyz, alpha );
+
+		}
+
+		void main() {
+
+			#ifdef USE_COLOR
+
+				vColor.xyz = ( position.y < 0.5 ) ? instanceColorStart : instanceColorEnd;
+
+			#endif
+
+			#ifdef USE_DASH
+
+				vLineDistance = ( position.y < 0.5 ) ? dashScale * instanceDistanceStart : dashScale * instanceDistanceEnd;
+
+			#endif
+
+			float aspect = resolution.x / resolution.y;
+
+			vUv = uv;
+
+			// camera space
+			vec4 start = modelViewMatrix * vec4( instanceStart, 1.0 );
+			vec4 end = modelViewMatrix * vec4( instanceEnd, 1.0 );
+
+			// special case for perspective projection, and segments that terminate either in, or behind, the camera plane
+			// clearly the gpu firmware has a way of addressing this issue when projecting into ndc space
+			// but we need to perform ndc-space calculations in the shader, so we must address this issue directly
+			// perhaps there is a more elegant solution -- WestLangley
+
+			bool perspective = ( projectionMatrix[ 2 ][ 3 ] == - 1.0 ); // 4th entry in the 3rd column
+
+			if ( perspective ) {
+
+				if ( start.z < 0.0 && end.z >= 0.0 ) {
+
+					trimSegment( start, end );
+
+				} else if ( end.z < 0.0 && start.z >= 0.0 ) {
+
+					trimSegment( end, start );
+
+				}
+
+			}
+
+			// clip space
+			vec4 clipStart = projectionMatrix * start;
+			vec4 clipEnd = projectionMatrix * end;
+
+			// ndc space
+			vec2 ndcStart = clipStart.xy / clipStart.w;
+			vec2 ndcEnd = clipEnd.xy / clipEnd.w;
+
+			// direction
+			vec2 dir = ndcEnd - ndcStart;
+
+			// account for clip-space aspect ratio
+			dir.x *= aspect;
+			dir = normalize( dir );
+
+			// perpendicular to dir
+			vec2 offset = vec2( dir.y, - dir.x );
+
+			// undo aspect ratio adjustment
+			dir.x /= aspect;
+			offset.x /= aspect;
+
+			// sign flip
+			if ( position.x < 0.0 ) offset *= - 1.0;
+
+			// endcaps
+			if ( position.y < 0.0 ) {
+
+				offset += - dir;
+
+			} else if ( position.y > 1.0 ) {
+
+				offset += dir;
+
+			}
+
+			// adjust for linewidth
+			offset *= linewidth;
+
+			// adjust for clip-space to screen-space conversion // maybe resolution should be based on viewport ...
+			offset /= resolution.y;
+
+			// select end
+			vec4 clip = ( position.y < 0.5 ) ? clipStart : clipEnd;
+
+			// back to clip space
+			offset *= clip.w;
+
+			clip.xy += offset;
+
+			gl_Position = clip;
+
+			vec4 mvPosition = ( position.y < 0.5 ) ? start : end; // this is an approximation
+
+			#include <logdepthbuf_vertex>
+			#include <clipping_planes_vertex>
+			#include <fog_vertex>
+
+		}
+		`,fragmentShader:`
+		uniform vec3 diffuse;
+		uniform float opacity;
+
+		#ifdef USE_DASH
+
+			uniform float dashSize;
+			uniform float dashOffset;
+			uniform float gapSize;
+
+		#endif
+
+		varying float vLineDistance;
+
+		#include <common>
+		#include <color_pars_fragment>
+		#include <fog_pars_fragment>
+		#include <logdepthbuf_pars_fragment>
+		#include <clipping_planes_pars_fragment>
+
+		varying vec2 vUv;
+
+		void main() {
+
+			#include <clipping_planes_fragment>
+
+			#ifdef USE_DASH
+
+				if ( vUv.y < - 1.0 || vUv.y > 1.0 ) discard; // discard endcaps
+
+				if ( mod( vLineDistance + dashOffset, dashSize + gapSize ) > dashSize ) discard; // todo - FIX
+
+			#endif
+
+			float alpha = opacity;
+
+			#ifdef ALPHA_TO_COVERAGE
+
+			// artifacts appear on some hardware if a derivative is taken within a conditional
+			float a = vUv.x;
+			float b = ( vUv.y > 0.0 ) ? vUv.y - 1.0 : vUv.y + 1.0;
+			float len2 = a * a + b * b;
+			float dlen = fwidth( len2 );
+
+			if ( abs( vUv.y ) > 1.0 ) {
+
+				alpha = 1.0 - smoothstep( 1.0 - dlen, 1.0 + dlen, len2 );
+
+			}
+
+			#else
+
+			if ( abs( vUv.y ) > 1.0 ) {
+
+				float a = vUv.x;
+				float b = ( vUv.y > 0.0 ) ? vUv.y - 1.0 : vUv.y + 1.0;
+				float len2 = a * a + b * b;
+
+				if ( len2 > 1.0 ) discard;
+
+			}
+
+			#endif
+
+			vec4 diffuseColor = vec4( diffuse, alpha );
+
+			#include <logdepthbuf_fragment>
+			#include <color_fragment>
+
+			gl_FragColor = vec4( diffuseColor.rgb, alpha );
+
+			#include <tonemapping_fragment>
+			#include <encodings_fragment>
+			#include <fog_fragment>
+			#include <premultiplied_alpha_fragment>
+
+		}
+		`};var v=class extends Q{constructor(e){super({type:"LineMaterial",uniforms:j.clone(A.line.uniforms),vertexShader:A.line.vertexShader,fragmentShader:A.line.fragmentShader,clipping:!0}),this.dashed=!1,Object.defineProperties(this,{color:{enumerable:!0,get:function(){return this.uniforms.diffuse.value},set:function(t){this.uniforms.diffuse.value=t}},linewidth:{enumerable:!0,get:function(){return this.uniforms.linewidth.value},set:function(t){this.uniforms.linewidth.value=t}},dashScale:{enumerable:!0,get:function(){return this.uniforms.dashScale.value},set:function(t){this.uniforms.dashScale.value=t}},dashSize:{enumerable:!0,get:function(){return this.uniforms.dashSize.value},set:function(t){this.uniforms.dashSize.value=t}},dashOffset:{enumerable:!0,get:function(){return this.uniforms.dashOffset.value},set:function(t){this.uniforms.dashOffset.value=t}},gapSize:{enumerable:!0,get:function(){return this.uniforms.gapSize.value},set:function(t){this.uniforms.gapSize.value=t}},opacity:{enumerable:!0,get:function(){return this.uniforms.opacity.value},set:function(t){this.uniforms.opacity.value=t}},resolution:{enumerable:!0,get:function(){return this.uniforms.resolution.value},set:function(t){this.uniforms.resolution.value.copy(t)}},alphaToCoverage:{enumerable:!0,get:function(){return"ALPHA_TO_COVERAGE"in this.defines},set:function(t){!!t!="ALPHA_TO_COVERAGE"in this.defines&&(this.needsUpdate=!0),t?(this.defines.ALPHA_TO_COVERAGE="",this.extensions.derivatives=!0):(delete this.defines.ALPHA_TO_COVERAGE,this.extensions.derivatives=!1)}}}),this.setValues(e)}};v.prototype.isLineMaterial=!0;var V=new m,F=new m,s=new G,a=new G,d=new G,W=new m,N=new ee,l=new Z,oe=new m,x=new z,H=new I,p=new G,M=class extends te{constructor(e=new h,t=new v({color:Math.random()*16777215})){super(e,t),this.type="LineSegments2"}computeLineDistances(){let e=this.geometry,t=e.attributes.instanceStart,i=e.attributes.instanceEnd,n=new Float32Array(2*t.count);for(let u=0,c=0,f=t.count;u<f;u++,c+=2)V.fromBufferAttribute(t,u),F.fromBufferAttribute(i,u),n[c]=c===0?0:n[c-1],n[c+1]=n[c]+V.distanceTo(F);let r=new U(n,2,1);return e.setAttribute("instanceDistanceStart",new y(r,1,0)),e.setAttribute("instanceDistanceEnd",new y(r,1,1)),this}raycast(e,t){e.camera===null&&console.error('LineSegments2: "Raycaster.camera" needs to be set in order to raycast against LineSegments2.');let i=e.params.Line2!==void 0&&e.params.Line2.threshold||0,n=e.ray,r=e.camera,u=r.projectionMatrix,c=this.matrixWorld,f=this.geometry,q=this.material,g=q.resolution,P=q.linewidth+i,R=f.attributes.instanceStart,k=f.attributes.instanceEnd,E=-r.near,J=2*Math.max(P/g.width,P/g.height);f.boundingSphere===null&&f.computeBoundingSphere(),H.copy(f.boundingSphere).applyMatrix4(c);let se=Math.max(r.near,H.distanceToPoint(n.origin));p.set(0,0,-se,1).applyMatrix4(r.projectionMatrix),p.multiplyScalar(1/p.w),p.applyMatrix4(r.projectionMatrixInverse);let ae=Math.abs(J/p.w)*.5;if(H.radius+=ae,e.ray.intersectsSphere(H)===!1)return;f.boundingBox===null&&f.computeBoundingBox(),x.copy(f.boundingBox).applyMatrix4(c);let ce=Math.max(r.near,x.distanceToPoint(n.origin));p.set(0,0,-ce,1).applyMatrix4(r.projectionMatrix),p.multiplyScalar(1/p.w),p.applyMatrix4(r.projectionMatrixInverse);let B=Math.abs(J/p.w)*.5;if(x.max.x+=B,x.max.y+=B,x.max.z+=B,x.min.x-=B,x.min.y-=B,x.min.z-=B,e.ray.intersectsBox(x)!==!1){n.at(1,d),d.w=1,d.applyMatrix4(r.matrixWorldInverse),d.applyMatrix4(u),d.multiplyScalar(1/d.w),d.x*=g.x/2,d.y*=g.y/2,d.z=0,W.copy(d),N.multiplyMatrices(r.matrixWorldInverse,c);for(let S=0,ue=R.count;S<ue;S++){s.fromBufferAttribute(R,S),a.fromBufferAttribute(k,S),V.w=1,F.w=1,s.applyMatrix4(N),a.applyMatrix4(N);var le=s.z>E&&a.z>E;if(le)continue;if(s.z>E){let _=s.z-a.z,b=(s.z-E)/_;s.lerp(a,b)}else if(a.z>E){let _=a.z-s.z,b=(a.z-E)/_;a.lerp(s,b)}s.applyMatrix4(u),a.applyMatrix4(u),s.multiplyScalar(1/s.w),a.multiplyScalar(1/a.w),s.x*=g.x/2,s.y*=g.y/2,a.x*=g.x/2,a.y*=g.y/2,l.start.copy(s),l.start.z=0,l.end.copy(a),l.end.z=0;let X=l.closestPointToPointParameter(W,!0);l.at(X,oe);let K=$.lerp(s.z,a.z,X),fe=K>=-1&&K<=1,de=W.distanceTo(oe)<P*.5;if(fe&&de){l.start.fromBufferAttribute(R,S),l.end.fromBufferAttribute(k,S),l.start.applyMatrix4(c),l.end.applyMatrix4(c);let _=new m,b=new m;n.distanceSqToSegment(l.start,l.end,b,_),t.push({point:b,pointOnLine:_,distance:n.origin.distanceTo(b),object:this,face:null,faceIndex:S,uv:null,uv2:null})}}}}};M.prototype.LineSegments2=!0;var T=class extends M{constructor(e=new w,t=new v({color:Math.random()*16777215})){super(e,t),this.type="Line2"}};T.prototype.isLine2=!0;window.THREE.LineSegmentsGeometry=h;window.THREE.LineGeometry=w;window.THREE.LineMaterial=v;window.THREE.LineSegments2=M;window.THREE.Line2=T;})();
+</script>
 
 <div id="topbar">
   <div class="title-block">
@@ -296,6 +520,10 @@
       <div class="stat-label">Glide</div>
       <div class="stat-value" id="stat-glide">—</div>
     </div>
+    <div class="stat">
+      <div class="stat-label">Distance</div>
+      <div class="stat-value"><span id="stat-dist">0</span><span class="unit">mi</span></div>
+    </div>
   </div>
 </div>
 
@@ -313,6 +541,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   }
 
   const M_TO_FT = 3.28084;
+  const M_TO_MI = 0.000621371;
   const MPS_TO_MPH = 2.23694;
   const MPS_TO_FPM = 196.850;
 
@@ -511,13 +740,24 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   }
 
   // live traced path (grows as playback advances — nothing is drawn ahead of
-  // the marker; the path only reveals itself as it's flown, not before)
-  const liveGeo = new THREE.BufferGeometry();
-  liveGeo.setAttribute('position', new THREE.BufferAttribute(positions.slice(),3));
-  liveGeo.setAttribute('color', new THREE.BufferAttribute(vertexColors.slice(),3));
-  liveGeo.setDrawRange(0,1);
-  const liveMat = new THREE.LineBasicMaterial({vertexColors:true});
-  const liveLine = new THREE.Line(liveGeo, liveMat);
+  // the marker; the path only reveals itself as it's flown, not before).
+  // Uses the three.js "fat line" technique (Line2/LineMaterial/LineGeometry,
+  // bundled in above as a plain script since THREE.Line's basic material
+  // ignores linewidth on most GPUs/browsers — a known platform limitation).
+  // Width is fixed in screen pixels via the resolution uniform (kept in
+  // sync in resize()), so the path reads the same thickness at any zoom.
+  const liveGeo = new THREE.LineGeometry();
+  liveGeo.setPositions(positions);
+  liveGeo.setColors(vertexColors);
+  const liveMat = new THREE.LineMaterial({
+    vertexColors: true,
+    linewidth: 3.5,
+    alphaToCoverage: true,
+  });
+  liveMat.resolution.set(stage.clientWidth, stage.clientHeight);
+  const liveLine = new THREE.Line2(liveGeo, liveMat);
+  liveLine.computeLineDistances();
+  liveLine.geometry.instanceCount = 0; // nothing revealed until playback starts
   scene.add(liveLine);
 
   // current position marker: bright core + soft glow sprite (tinted to current phase color)
@@ -628,6 +868,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     renderer.setSize(w,h,false);
     camera.aspect = w/Math.max(h,1);
     camera.updateProjectionMatrix();
+    liveMat.resolution.set(w,h); // fat-line width is resolution-dependent — keep in sync
   }
   window.addEventListener('resize', resize);
   resize();
@@ -680,6 +921,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   const statV = document.getElementById('stat-vspeed');
   const statH = document.getElementById('stat-hspeed');
   const statGlide = document.getElementById('stat-glide');
+  const statDist = document.getElementById('stat-dist');
 
   const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
   const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
@@ -734,7 +976,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     const flightT = frac * totalDuration;
     const i = findIndexForTime(flightT);
     const count = Math.max(2, i+1);
-    liveGeo.setDrawRange(0, count);
+    liveLine.geometry.instanceCount = Math.max(1, count-1); // fat-line equivalent of setDrawRange
 
     const p = pts[i];
     marker.position.set(p.x,p.y,p.z);
@@ -771,6 +1013,11 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
       const ratio = cumHorizDist[i] / Math.abs(vertDrop);
       statGlide.textContent = ratio > 200 ? '—' : ratio.toFixed(1)+' : 1';
     }
+
+    // cumulative ground track distance flown so far (horizontal only, not
+    // path-through-the-air distance) — reuses cumHorizDist, already computed
+    // once from the same x/z series the glide-ratio stat above reads from
+    statDist.textContent = (cumHorizDist[i] * M_TO_MI).toFixed(2);
 
     if(phases.hasExit){
       calloutExitEl.classList.add('show');
