@@ -22,12 +22,21 @@ import java.io.File
 
 class FlightViewerActivity : ComponentActivity() {
 
+    companion object {
+        const val EXTRA_FLIGHT_KEY = "flight_key"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Which flight to open: for now, the most recently recorded one.
-        // Once a real "Past Flights" picker exists, this becomes an intent extra instead.
-        val flightFile = FlightFileStorage.listFlights(this).firstOrNull()
+        // Open the requested flight if one was passed in (from the Past Flights picker);
+        // otherwise fall back to most-recent, same as "View Latest Flight" on the home screen.
+        val requestedKey = intent.getStringExtra(EXTRA_FLIGHT_KEY)
+        val flightFile = requestedKey
+            ?.let { FlightFileStorage.csvFileForKey(this, it) }
+            ?.takeIf { it.exists() }
+            ?: FlightFileStorage.listFlights(this).firstOrNull()
+
         if (flightFile == null) {
             showNoFlightsMessage()
             return
@@ -46,11 +55,10 @@ class FlightViewerActivity : ComponentActivity() {
         webView.loadUrl("file:///android_asset/flight_viewer.html")
 
         lifecycleScope.launch {
-            // CSV parsing, coordinate math, and the network fetch all happen off the main thread
             val callJs = withContext(Dispatchers.IO) {
                 buildRunViewerCall(flightFile)
             }
-            pageReady.await() // don't call into the page before it has actually finished loading
+            pageReady.await()
             if (callJs != null) {
                 webView.evaluateJavascript(callJs, null)
             }
@@ -69,7 +77,7 @@ class FlightViewerActivity : ComponentActivity() {
         }
 
         val metaJson = JSONObject()
-            .put("title", flightFile.nameWithoutExtension)
+            .put("title", FlightFileStorage.labelForKey(flightFile.nameWithoutExtension))   // CHANGED
             .put("subtitle", "GPS + barometer log")
 
         val mapFile = MapImageFetcher.getSatelliteImage(
@@ -95,7 +103,6 @@ class FlightViewerActivity : ComponentActivity() {
                 .put("centerZ", 0.0)
                 .toString()
         } else {
-            // map fetch failed (offline, quota, key issue, etc.) — still show the flight, just without imagery
             mapImageArg = "null"
             mapMetaArg = "null"
         }

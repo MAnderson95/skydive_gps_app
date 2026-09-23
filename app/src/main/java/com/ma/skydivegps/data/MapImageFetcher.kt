@@ -15,6 +15,16 @@ object MapImageFetcher {
     private const val TAG = "MapImageFetcher"
 
     /**
+     * Where a flight's cached satellite image lives, whether or not it's been fetched yet.
+     * Exposed so other code (e.g. FlightFileStorage's per-flight file lookup) can find this
+     * file without duplicating the cache-path logic.
+     */
+    fun cacheFileFor(context: Context, cacheKey: String): File {
+        val cacheDir = File(context.cacheDir, "map_tiles")
+        return File(cacheDir, "$cacheKey.png")
+    }
+
+    /**
      * Fetches (or returns a cached) satellite image covering the given center point,
      * suitable for texturing under a flight path. Cached by cacheKey so we don't
      * re-fetch (and re-bill) the same flight repeatedly.
@@ -27,9 +37,8 @@ object MapImageFetcher {
         zoom: Int = 15,
         sizePx: Int = 640
     ): File? {
-        val cacheDir = File(context.cacheDir, "map_tiles")
-        if (!cacheDir.exists()) cacheDir.mkdirs()
-        val cacheFile = File(cacheDir, "$cacheKey.png")
+        val cacheFile = cacheFileFor(context, cacheKey)
+        cacheFile.parentFile?.let { if (!it.exists()) it.mkdirs() }
         if (cacheFile.exists()) return cacheFile
 
         val urlStr = "https://maps.googleapis.com/maps/api/staticmap" +

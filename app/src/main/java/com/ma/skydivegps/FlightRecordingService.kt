@@ -20,6 +20,7 @@ class FlightRecordingService : Service() {
     private lateinit var barometerTracker: BarometerTracker
     private lateinit var gnssStatusTracker: GnssStatusTracker
     private var wakeLock: PowerManager.WakeLock? = null
+    private var recordingStartTimeMillis: Long = 0L
 
     private var latestPressureHpa: Float? = null
     private var latestBaroAltitude: Float? = null
@@ -28,6 +29,7 @@ class FlightRecordingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        recordingStartTimeMillis = System.currentTimeMillis()
         FlightLogger.clear()
 
         barometerTracker = BarometerTracker(this) { pressureHpa, altitude ->
@@ -88,7 +90,7 @@ class FlightRecordingService : Service() {
         wakeLock = null
         val points = FlightLogger.getPoints()
         if (points.isNotEmpty()) {
-            FlightFileStorage.saveFlight(this, points)
+            FlightFileStorage.saveFlight(this, points, recordingStartTimeMillis)
         }
         FlightLogger.clear()
     }
