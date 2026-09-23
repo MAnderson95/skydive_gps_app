@@ -214,6 +214,64 @@
     min-width:74px; text-align:right;
   }
 
+  #speed-wrap{
+    position:relative;
+    flex:0 0 auto;
+  }
+  #speedbtn{
+    flex:0 0 auto;
+    width:28px; height:28px;
+    border-radius:50%;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    color:var(--text-dim);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  #speedbtn svg{width:14px; height:14px;}
+  #speedbtn:active{background:var(--line);}
+  #speed-menu{
+    position:absolute;
+    bottom:calc(100% + 6px);
+    right:0;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    padding:4px;
+    min-width:130px;
+    background:rgba(10,15,22,.94);
+    border:1px solid var(--line);
+    border-radius:8px;
+    z-index:10;
+  }
+  #speed-menu[hidden]{display:none;}
+  #speed-menu .speed-menu-title{
+    padding:6px 10px 5px;
+    font-size:10px;
+    color:var(--text-dim);
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    border-bottom:1px solid var(--line);
+    margin-bottom:2px;
+  }
+  #speed-menu button{
+    text-align:left;
+    padding:7px 10px;
+    border-radius:6px;
+    border:none;
+    background:none;
+    color:var(--text);
+    font-family:'Manrope',sans-serif;
+    font-size:12px;
+    cursor:pointer;
+  }
+  #speed-menu button:active{background:var(--line);}
+  #speed-menu button.active{
+    background:var(--surface-2);
+    color:var(--accent);
+    font-weight:700;
+  }
+
   #stats{
     display:grid;
     grid-template-columns:repeat(5, 1fr);
@@ -502,6 +560,10 @@
     <button id="playbtn" aria-label="Play"></button>
     <input id="scrubber" type="range" min="0" max="1000" value="0" step="1" aria-label="Playback position">
     <div id="playback-time">0:00</div>
+    <div id="speed-wrap">
+      <button id="speedbtn" aria-haspopup="true" aria-expanded="false" aria-label="Playback speed"></button>
+      <div id="speed-menu" hidden role="menu"></div>
+    </div>
   </div>
   <div id="stats">
     <div class="stat">
@@ -912,7 +974,21 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   }
 
   // ---------- playback ----------
-  const PLAYBACK_SECONDS = Math.min(30, Math.max(15, totalDuration/20)); // compress into a watchable clip
+  // Three speed presets, selectable from a small menu next to the scrubber.
+  // "Compressed" is today's original (and still default) behavior, unchanged
+  // — an adaptive clip length, not a literal fixed number, so its label
+  // describes what it does rather than promising an exact duration. "Real
+  // time" plays back the already-trimmed exit-to-landing segment (the same
+  // totalDuration the compressed default is based on) at its actual pace —
+  // the plane's climb to altitude was already excluded upstream by
+  // classifyPhases()'s trim, nothing extra needed here for that.
+  const SPEED_PRESETS = [
+    { label:'Compressed', shortLabel:'Comp', seconds: Math.min(30, Math.max(15, totalDuration/20)) },
+    { label:'90 seconds',  shortLabel:'90s',  seconds: 90 },
+    { label:'Real time',   shortLabel:'Real', seconds: totalDuration },
+  ];
+  let speedIndex = 0;
+  let PLAYBACK_SECONDS = SPEED_PRESETS[speedIndex].seconds;
   let playing = true;
   let playbackT = 0; // 0..PLAYBACK_SECONDS
   let lastFrame = performance.now();
@@ -929,6 +1005,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
 
   const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
   const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+  const ICON_STOPWATCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="2" x2="15" y2="2"/><line x1="12" y1="2" x2="12" y2="5"/><circle cx="12" cy="14" r="8"/><line x1="12" y1="14" x2="12" y2="10"/><line x1="12" y1="14" x2="15" y2="16"/></svg>';
   playbtn.innerHTML = ICON_PAUSE;
 
   function fmtClock(sec){
@@ -1050,6 +1127,50 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
       playbackT = 0;
     }
     lastFrame = performance.now();
+  });
+
+  // ---------- playback speed menu ----------
+  const speedbtn = document.getElementById('speedbtn');
+  const speedMenu = document.getElementById('speed-menu');
+  speedbtn.innerHTML = ICON_STOPWATCH; // static icon; the button no longer echoes the selected preset as text
+  speedMenu.innerHTML = '<div class="speed-menu-title" aria-hidden="true">Playback speed</div>' +
+    SPEED_PRESETS.map((p,i)=>
+      '<button type="button" role="menuitemradio" data-speed-idx="'+i+'">'+p.label+'</button>'
+    ).join('');
+  const speedMenuButtons = [...speedMenu.querySelectorAll('button')];
+
+  function updateSpeedUi(){
+    speedMenuButtons.forEach((btn,i)=>{
+      btn.classList.toggle('active', i===speedIndex);
+      btn.setAttribute('aria-checked', i===speedIndex ? 'true' : 'false');
+    });
+  }
+  updateSpeedUi();
+
+  function openSpeedMenu(){ speedMenu.hidden = false; speedbtn.setAttribute('aria-expanded','true'); }
+  function closeSpeedMenu(){ speedMenu.hidden = true; speedbtn.setAttribute('aria-expanded','false'); }
+
+  speedbtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(speedMenu.hidden) openSpeedMenu(); else closeSpeedMenu();
+  });
+  document.addEventListener('click', ()=>{ closeSpeedMenu(); });
+  speedMenu.addEventListener('click', (e)=>{ e.stopPropagation(); });
+
+  speedMenuButtons.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = parseInt(btn.dataset.speedIdx, 10);
+      closeSpeedMenu();
+      if(idx === speedIndex) return;
+      // preserve the current position in the flight across the speed change
+      // (convert to a fraction of the old duration, reapply to the new one)
+      // rather than resetting playback to the start.
+      const frac = PLAYBACK_SECONDS > 0 ? playbackT/PLAYBACK_SECONDS : 0;
+      speedIndex = idx;
+      PLAYBACK_SECONDS = SPEED_PRESETS[speedIndex].seconds;
+      updateSpeedUi();
+      setByFraction(frac);
+    });
   });
 
   setByFraction(0);
