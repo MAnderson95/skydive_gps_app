@@ -8,8 +8,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,13 +22,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.ma.skydivegps.data.Flight
 import com.ma.skydivegps.data.FlightFileStorage
 import java.io.File
+
+private enum class Screen { Home, PastFlights }
 
 class MainActivity : ComponentActivity() {
 
     private var isRecording by mutableStateOf(false)
-    private var flightFiles by mutableStateOf(listOf<File>())
+    private var flights by mutableStateOf(listOf<Flight>())
+    private var currentScreen by mutableStateOf(Screen.Home)
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -43,15 +49,25 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    RecordingScreen(
-                        isRecording = isRecording,
-                        flightFiles = flightFiles,
-                        onStartClick = { checkPermissionsAndStart() },
-                        onStopClick = { stopRecording() },
-                        onShareClick = { file -> shareFlight(file) },
-                        onRefreshClick = { refreshFlightList() },
-                        onViewTestFlightClick = { openViewer() }
-                    )
+                    BackHandler(enabled = currentScreen == Screen.PastFlights) {
+                        currentScreen = Screen.Home
+                    }
+                    when (currentScreen) {
+                        Screen.Home -> HomeScreen(
+                            isRecording = isRecording,
+                            onStartClick = { checkPermissionsAndStart() },
+                            onStopClick = { stopRecording() },
+                            onViewLatestClick = { openViewer(null) },
+                            onPastFlightsClick = { currentScreen = Screen.PastFlights }
+                        )
+                        Screen.PastFlights -> PastFlightsScreen(
+                            flights = flights,
+                            onBackClick = { currentScreen = Screen.Home },
+                            onFlightClick = { flight -> openViewer(flight.key) },
+                            onShareClick = { flight -> shareFlight(flight.csvFile) },
+                            onDeleteConfirmed = { flight -> deleteFlight(flight) }
+                        )
+                    }
                 }
             }
         }
@@ -71,7 +87,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshFlightList() {
-        flightFiles = FlightFileStorage.listFlights(this)
+        flights = FlightFileStorage.listFlightsAsFlights(this)
     }
 
     private fun checkPermissionsAndStart() {
@@ -126,67 +142,94 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent.createChooser(shareIntent, "Share flight data"))
     }
 
-    private fun openViewer() {
-        startActivity(Intent(this, FlightViewerActivity::class.java))
+    private fun deleteFlight(flight: Flight) {
+        FlightFileStorage.deleteFlight(this, flight.key)
+        refreshFlightList()
+    }
+
+    private fun openViewer(flightKey: String?) {
+        val intent = Intent(this, FlightViewerActivity::class.java)
+        if (flightKey != null) {
+            intent.putExtra(FlightViewerActivity.EXTRA_FLIGHT_KEY, flightKey)
+        }
+        startActivity(intent)
     }
 }
 
 @Composable
-fun RecordingScreen(
+private fun HomeScreen(
     isRecording: Boolean,
-    flightFiles: List<File>,
     onStartClick: () -> Unit,
     onStopClick: () -> Unit,
-    onShareClick: (File) -> Unit,
-    onRefreshClick: () -> Unit,
-    onViewTestFlightClick: () -> Unit
+    onViewLatestClick: () -> Unit,
+    onPastFlightsClick: () -> Unit
 ) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Spacer(modifier = Modifier.height(48.dp))
+        Text(
+            text = if (isRecording) "Recording flight..." else "Ready to record",
+            style = MaterialTheme.typography.headlineSmall
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = if (isRecording) onStopClick else onStartClick,
+            modifier = Modifier.size(width = 200.dp, height = 60.dp)
+        ) {
+            Text(if (isRecording) "Stop" else "Start Flight")
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        OutlinedButton(onClick = onViewLatestClick) {
+            Text("View Latest Flight")
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        OutlinedButton(onClick = onPastFlightsClick) {
+            Text("Past Flights")
+        }
+    }
+}
+
+@Composable
+private fun PastFlightsScreen(
+    flights: List<Flight>,
+    onBackClick: () -> Unit,
+    onFlightClick: (Flight) -> Unit,
+    onShareClick: (Flight) -> Unit,
+    onDeleteConfirmed: (Flight) -> Unit
+) {
+    var pendingDelete by remember { mutableStateOf<Flight?>(null) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = if (isRecording) "Recording flight..." else "Ready to record",
-                style = MaterialTheme.typography.headlineSmall
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = if (isRecording) onStopClick else onStartClick,
-                modifier = Modifier.size(width = 200.dp, height = 60.dp)
-            ) {
-                Text(if (isRecording) "Stop" else "Start Flight")
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            OutlinedButton(onClick = onViewTestFlightClick) {
-                Text("Test 3D Viewer")
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBackClick) { Text("< Back") }
+            Spacer(modifier = Modifier.width(4.dp))
             Text("Past Flights", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onRefreshClick) {
-                Text("Refresh")
-            }
         }
-
         Spacer(modifier = Modifier.height(8.dp))
 
+        if (flights.isEmpty()) {
+            Text(
+                "No recorded flights yet.",
+                modifier = Modifier.padding(top = 24.dp)
+            )
+        }
+
         LazyColumn {
-            items(flightFiles) { file ->
-                Card(modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)) {
+            items(flights, key = { it.key }) { flight ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clickable { onFlightClick(flight) }
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -194,13 +237,31 @@ fun RecordingScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(file.name, style = MaterialTheme.typography.bodyMedium)
-                        Button(onClick = { onShareClick(file) }) {
-                            Text("Share")
+                        Text(flight.label, style = MaterialTheme.typography.bodyMedium)
+                        Row {
+                            TextButton(onClick = { onShareClick(flight) }) { Text("Share") }
+                            TextButton(onClick = { pendingDelete = flight }) { Text("Delete") }
                         }
                     }
                 }
             }
         }
+    }
+
+    pendingDelete?.let { flight ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete this flight?") },
+            text = { Text("This can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeleteConfirmed(flight)
+                    pendingDelete = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+            }
+        )
     }
 }
