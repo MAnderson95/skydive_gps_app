@@ -11,13 +11,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -26,8 +22,10 @@ import androidx.lifecycle.lifecycleScope
 import com.ma.skydivegps.data.Flight
 import com.ma.skydivegps.data.FlightCsvReader
 import com.ma.skydivegps.data.FlightFileStorage
+import com.ma.skydivegps.ui.PastFlightItem
 import com.ma.skydivegps.ui.RecordingLiveState
 import com.ma.skydivegps.ui.TailwindHomeScreen
+import com.ma.skydivegps.ui.TailwindPastFlightsScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -43,7 +41,8 @@ private data class FlightSummaries(
     val flights: List<Flight>,
     val latestFlightLabel: String?,
     val latestFlightDurationText: String?,
-    val flightCountText: String
+    val flightCountText: String,
+    val pastFlightItems: List<PastFlightItem>
 )
 
 class MainActivity : ComponentActivity() {
@@ -53,6 +52,7 @@ class MainActivity : ComponentActivity() {
     private var latestFlightLabel by mutableStateOf<String?>(null)
     private var latestFlightDurationText by mutableStateOf<String?>(null)
     private var flightCountText by mutableStateOf("0 recorded flights")
+    private var pastFlightItems by mutableStateOf(listOf<PastFlightItem>())
     private var currentScreen by mutableStateOf(Screen.Home)
 
     private val permissionLauncher = registerForActivityResult(
@@ -102,6 +102,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    var deleteTarget by remember { mutableStateOf<Flight?>(null) }
+
                     when (currentScreen) {
                         Screen.Home -> TailwindHomeScreen(
                             isRecording = isRecording,
@@ -119,12 +121,19 @@ class MainActivity : ComponentActivity() {
                             onOpenLatestFlight = { if (!isRecording) openViewer(null) },
                             onOpenPastFlights = { currentScreen = Screen.PastFlights }
                         )
-                        Screen.PastFlights -> PastFlightsScreen(
-                            flights = flights,
-                            onBackClick = { currentScreen = Screen.Home },
-                            onFlightClick = { flight -> openViewer(flight.key) },
-                            onShareClick = { flight -> shareFlight(flight.csvFile) },
-                            onDeleteConfirmed = { flight -> deleteFlight(flight) }
+                        Screen.PastFlights -> TailwindPastFlightsScreen(
+                            items = pastFlightItems,
+                            flightCountText = flightCountText,
+                            onBack = { currentScreen = Screen.Home },
+                            onOpenFlight = { flight -> openViewer(flight.key) },
+                            onShareFlight = { flight -> shareFlight(flight.csvFile) },
+                            onRequestDelete = { flight -> deleteTarget = flight },
+                            deleteTarget = deleteTarget,
+                            onCancelDelete = { deleteTarget = null },
+                            onConfirmDelete = {
+                                deleteTarget?.let { deleteFlight(it) }
+                                deleteTarget = null
+                            }
                         )
                     }
                 }
@@ -152,25 +161,28 @@ class MainActivity : ComponentActivity() {
             latestFlightLabel = summaries.latestFlightLabel
             latestFlightDurationText = summaries.latestFlightDurationText
             flightCountText = summaries.flightCountText
+            pastFlightItems = summaries.pastFlightItems
         }
     }
 
-    /** Off-main-thread: lists flights, reads the latest one's CSV for its total duration (only
-     *  the latest — not every flight, to keep this cheap), and sums every flight's on-disk size
-     *  (CSV + any cached map image) for the "N recorded flights · X.X MB" line. */
+    /** Off-main-thread: lists flights, reads every flight's CSV for its total duration (needed
+     *  for the Past Flights list, not just the latest one — see PastFlightItem), and sums every
+     *  flight's on-disk size (CSV + any cached map image) for the "N recorded flights · X.X MB"
+     *  line. Reading every flight's CSV here is fine at the flight counts a personal single-device
+     *  app like this actually accumulates; if that ever grows into the hundreds, this is the
+     *  place to add caching rather than re-parsing every CSV on every refresh. */
     private fun computeFlightSummaries(): FlightSummaries {
         val list = FlightFileStorage.listFlightsAsFlights(this)
 
-        val latest = list.firstOrNull()
-        val latestDurationText = latest?.let { flight ->
+        fun durationTextFor(flight: Flight): String? {
             val points = FlightCsvReader.readFlight(flight.csvFile)
-            if (points.size >= 2) {
-                val seconds = (points.last().timestamp - points.first().timestamp) / 1000
-                formatDuration(seconds)
-            } else {
-                null
-            }
+            if (points.size < 2) return null
+            val seconds = (points.last().timestamp - points.first().timestamp) / 1000
+            return formatDuration(seconds)
         }
+
+        val pastItems = list.map { flight -> PastFlightItem(flight, durationTextFor(flight)) }
+        val latestDurationText = pastItems.firstOrNull()?.durationText
 
         val totalBytes = list.sumOf { flight ->
             FlightFileStorage.filesForFlight(this, flight.key).sumOf { it.length() }
@@ -182,9 +194,10 @@ class MainActivity : ComponentActivity() {
 
         return FlightSummaries(
             flights = list,
-            latestFlightLabel = latest?.label,
+            latestFlightLabel = list.firstOrNull()?.label,
             latestFlightDurationText = latestDurationText,
-            flightCountText = countText
+            flightCountText = countText,
+            pastFlightItems = pastItems
         )
     }
 
@@ -264,81 +277,5 @@ class MainActivity : ComponentActivity() {
             intent.putExtra(FlightViewerActivity.EXTRA_FLIGHT_KEY, flightKey)
         }
         startActivity(intent)
-    }
-}
-
-// PastFlightsScreen is deliberately left in its original plain-Material3 style for now — its
-// Tailwind-palette reskin (matching the Design thread's clickable prototype) is scoped as the
-// next UX-reskin commit, kept separate so this one stays focused on Home/Splash.
-@Composable
-private fun PastFlightsScreen(
-    flights: List<Flight>,
-    onBackClick: () -> Unit,
-    onFlightClick: (Flight) -> Unit,
-    onShareClick: (Flight) -> Unit,
-    onDeleteConfirmed: (Flight) -> Unit
-) {
-    var pendingDelete by remember { mutableStateOf<Flight?>(null) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBackClick) { Text("< Back") }
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Past Flights", style = MaterialTheme.typography.titleMedium)
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (flights.isEmpty()) {
-            Text(
-                "No recorded flights yet.",
-                modifier = Modifier.padding(top = 24.dp)
-            )
-        }
-
-        LazyColumn {
-            items(flights, key = { it.key }) { flight ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clickable { onFlightClick(flight) }
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(flight.label, style = MaterialTheme.typography.bodyMedium)
-                        Row {
-                            TextButton(onClick = { onShareClick(flight) }) { Text("Share") }
-                            TextButton(onClick = { pendingDelete = flight }) { Text("Delete") }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    pendingDelete?.let { flight ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text("Delete this flight?") },
-            text = { Text("This can't be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    onDeleteConfirmed(flight)
-                    pendingDelete = null
-                }) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
-            }
-        )
     }
 }
