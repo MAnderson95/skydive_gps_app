@@ -22,16 +22,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
 import com.ma.skydivegps.data.Flight
+import com.ma.skydivegps.data.FlightCsvReader
 import com.ma.skydivegps.data.FlightFileStorage
+import com.ma.skydivegps.ui.RecordingLiveState
+import com.ma.skydivegps.ui.TailwindHomeScreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 private enum class Screen { Home, PastFlights }
+
+/** Everything the Home screen needs about recorded flights, computed together off the main
+ *  thread (see MainActivity.refreshFlightList) since the duration figure requires actually
+ *  reading the latest flight's CSV, not just listing the directory. */
+private data class FlightSummaries(
+    val flights: List<Flight>,
+    val latestFlightLabel: String?,
+    val latestFlightDurationText: String?,
+    val flightCountText: String
+)
 
 class MainActivity : ComponentActivity() {
 
     private var isRecording by mutableStateOf(false)
     private var flights by mutableStateOf(listOf<Flight>())
+    private var latestFlightLabel by mutableStateOf<String?>(null)
+    private var latestFlightDurationText by mutableStateOf<String?>(null)
+    private var flightCountText by mutableStateOf("0 recorded flights")
     private var currentScreen by mutableStateOf(Screen.Home)
 
     private val permissionLauncher = registerForActivityResult(
@@ -52,18 +73,51 @@ class MainActivity : ComponentActivity() {
                     BackHandler(enabled = currentScreen == Screen.PastFlights) {
                         currentScreen = Screen.Home
                     }
+
+                    // Live chronometer/satellite readout for the Recording-active card, refreshed
+                    // by simple polling of FlightRecordingService's shared fields once a second —
+                    // same "keep it simple, tune later" status as the eventual Cn0-based
+                    // signal-strength label this is standing in for (PROJECT_CONTEXT).
+                    var recordingLive by remember { mutableStateOf<RecordingLiveState?>(null) }
+                    LaunchedEffect(isRecording) {
+                        if (isRecording) {
+                            while (true) {
+                                val startMillis = FlightRecordingService.recordingStartTimeMillisShared
+                                val elapsedSeconds = if (startMillis > 0) {
+                                    (System.currentTimeMillis() - startMillis) / 1000
+                                } else 0L
+                                val satellites = FlightRecordingService.latestSatellitesUsedShared
+                                recordingLive = RecordingLiveState(
+                                    elapsedText = formatElapsed(elapsedSeconds),
+                                    satellitesText = if (satellites != null) {
+                                        "GPS locked · $satellites satellites"
+                                    } else {
+                                        "Acquiring GPS…"
+                                    }
+                                )
+                                delay(1000)
+                            }
+                        } else {
+                            recordingLive = null
+                        }
+                    }
+
                     when (currentScreen) {
-                        Screen.Home -> HomeScreen(
+                        Screen.Home -> TailwindHomeScreen(
                             isRecording = isRecording,
-                            onStartClick = { checkPermissionsAndStart() },
-                            onStopClick = { stopRecording() },
-                            // Guarded here rather than just relying on the button being disabled
-                            // below: the current, still-recording flight hasn't been saved to
+                            recordingLive = recordingLive,
+                            latestFlightLabel = latestFlightLabel,
+                            latestFlightDurationText = latestFlightDurationText,
+                            flightCountText = flightCountText,
+                            onStartRecording = { checkPermissionsAndStart() },
+                            onStopRecording = { stopRecording() },
+                            // Guarded here rather than just relying on the card being dimmed while
+                            // recording: the current, still-recording flight hasn't been saved to
                             // disk yet (FlightRecordingService only writes it out in onDestroy),
                             // so opening the viewer mid-recording would silently show a stale old
                             // flight, or nothing at all if this is the very first flight.
-                            onViewLatestClick = { if (!isRecording) openViewer(null) },
-                            onPastFlightsClick = { currentScreen = Screen.PastFlights }
+                            onOpenLatestFlight = { if (!isRecording) openViewer(null) },
+                            onOpenPastFlights = { currentScreen = Screen.PastFlights }
                         )
                         Screen.PastFlights -> PastFlightsScreen(
                             flights = flights,
@@ -92,7 +146,59 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshFlightList() {
-        flights = FlightFileStorage.listFlightsAsFlights(this)
+        lifecycleScope.launch {
+            val summaries = withContext(Dispatchers.IO) { computeFlightSummaries() }
+            flights = summaries.flights
+            latestFlightLabel = summaries.latestFlightLabel
+            latestFlightDurationText = summaries.latestFlightDurationText
+            flightCountText = summaries.flightCountText
+        }
+    }
+
+    /** Off-main-thread: lists flights, reads the latest one's CSV for its total duration (only
+     *  the latest — not every flight, to keep this cheap), and sums every flight's on-disk size
+     *  (CSV + any cached map image) for the "N recorded flights · X.X MB" line. */
+    private fun computeFlightSummaries(): FlightSummaries {
+        val list = FlightFileStorage.listFlightsAsFlights(this)
+
+        val latest = list.firstOrNull()
+        val latestDurationText = latest?.let { flight ->
+            val points = FlightCsvReader.readFlight(flight.csvFile)
+            if (points.size >= 2) {
+                val seconds = (points.last().timestamp - points.first().timestamp) / 1000
+                formatDuration(seconds)
+            } else {
+                null
+            }
+        }
+
+        val totalBytes = list.sumOf { flight ->
+            FlightFileStorage.filesForFlight(this, flight.key).sumOf { it.length() }
+        }
+        val totalMb = totalBytes / (1024.0 * 1024.0)
+        val count = list.size
+        val countText = "$count recorded flight${if (count == 1) "" else "s"} · " +
+            "${"%.1f".format(totalMb)} MB"
+
+        return FlightSummaries(
+            flights = list,
+            latestFlightLabel = latest?.label,
+            latestFlightDurationText = latestDurationText,
+            flightCountText = countText
+        )
+    }
+
+    private fun formatElapsed(totalSeconds: Long): String {
+        val h = totalSeconds / 3600
+        val m = (totalSeconds % 3600) / 60
+        val s = totalSeconds % 60
+        return "%02d:%02d:%02d".format(h, m, s)
+    }
+
+    private fun formatDuration(totalSeconds: Long): String {
+        val m = totalSeconds / 60
+        val s = totalSeconds % 60
+        return "%d:%02d".format(m, s)
     }
 
     private fun checkPermissionsAndStart() {
@@ -161,43 +267,9 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable
-private fun HomeScreen(
-    isRecording: Boolean,
-    onStartClick: () -> Unit,
-    onStopClick: () -> Unit,
-    onViewLatestClick: () -> Unit,
-    onPastFlightsClick: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Spacer(modifier = Modifier.height(48.dp))
-        Text(
-            text = if (isRecording) "Recording flight..." else "Ready to record",
-            style = MaterialTheme.typography.headlineSmall
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = if (isRecording) onStopClick else onStartClick,
-            modifier = Modifier.size(width = 200.dp, height = 60.dp)
-        ) {
-            Text(if (isRecording) "Stop" else "Start Flight")
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        OutlinedButton(onClick = onViewLatestClick, enabled = !isRecording) {
-            Text(if (isRecording) "Recording in progress..." else "View Latest Flight")
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        OutlinedButton(onClick = onPastFlightsClick) {
-            Text("Past Flights")
-        }
-    }
-}
-
+// PastFlightsScreen is deliberately left in its original plain-Material3 style for now — its
+// Tailwind-palette reskin (matching the Design thread's clickable prototype) is scoped as the
+// next UX-reskin commit, kept separate so this one stays focused on Home/Splash.
 @Composable
 private fun PastFlightsScreen(
     flights: List<Flight>,
