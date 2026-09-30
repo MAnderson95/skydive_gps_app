@@ -2,36 +2,39 @@
 <title>Flight Trace</title>
 <style>
   :root{
-    --bg:#0a0f16;
-    --surface:#0e1620;
-    --surface-2:#16212e;
-    --line:#24323f;
-    --text:#e7edf3;
-    --text-dim:#7e93a8;
-    --text-faint:#4d6076;
-    --accent:#ff9f1c;
-    --accent-dim:#8a5a12;
+    --bg:#04182f;
+    --surface:#0a2c56;
+    --surface-2:#082349;
+    --line:#14417f;
+    --text:#ffffff;
+    --text-dim:#8fb3da;
+    --text-faint:#5a7fab;
+    --accent:#e05a2b;
+    --accent-dim:#702d16;
     --path-ghost:#2f5566;
     --path-live:#4fe0f0;
     --path-glow:#7ff2ff;
-    --freefall:#ffcc33;
-    --canopy:#eef4f8;
+    --freefall:#ffd23f;
+    --canopy:#ffffff;
+    --landing:#57e08a;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --bg:#0a0f16; --surface:#0e1620; --surface-2:#16212e; --line:#24323f;
-      --text:#e7edf3; --text-dim:#7e93a8; --text-faint:#4d6076;
-      --accent:#ff9f1c; --accent-dim:#8a5a12;
+      --bg:#04182f; --surface:#0a2c56; --surface-2:#082349; --line:#14417f;
+      --text:#ffffff; --text-dim:#8fb3da; --text-faint:#5a7fab;
+      --accent:#e05a2b; --accent-dim:#702d16;
       --path-ghost:#2f5566; --path-live:#4fe0f0; --path-glow:#7ff2ff;
-      --freefall:#ffcc33; --canopy:#eef4f8;
+      --freefall:#ffd23f; --canopy:#ffffff;
+      --landing:#57e08a;
     }
   }
   :root[data-theme="dark"]{
-    --bg:#0a0f16; --surface:#0e1620; --surface-2:#16212e; --line:#24323f;
-    --text:#e7edf3; --text-dim:#7e93a8; --text-faint:#4d6076;
-    --accent:#ff9f1c; --accent-dim:#8a5a12;
+    --bg:#04182f; --surface:#0a2c56; --surface-2:#082349; --line:#14417f;
+    --text:#ffffff; --text-dim:#8fb3da; --text-faint:#5a7fab;
+    --accent:#e05a2b; --accent-dim:#702d16;
     --path-ghost:#2f5566; --path-live:#4fe0f0; --path-glow:#7ff2ff;
-    --freefall:#ffcc33; --canopy:#eef4f8;
+    --freefall:#ffd23f; --canopy:#ffffff;
+    --landing:#57e08a;
   }
 
   *{box-sizing:border-box;}
@@ -107,7 +110,15 @@
   }
   #legend[hidden]{display:none;}
   #legend .row{display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text-dim); letter-spacing:.02em;}
+  #legend .row[hidden]{display:none;}
   #legend .dot{width:8px; height:8px; border-radius:50%; flex:0 0 auto;}
+  /* Event rows (Exit / Under Canopy / Landing) — added 2026-09-27 to replace
+     the old leader-line callouts. Each is a static marker sitting directly on
+     the 3D path (see the JS makeEndpoint() calls), so unlike a screen-space
+     leader-line callout it never needs to reproject and can't jiggle when the
+     camera orbits — there's simply nothing to reposition. Each row starts
+     hidden and reveals once the scrubber passes that point, same as the old
+     callouts did. */
 
   #phase-note{
     position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
@@ -118,45 +129,6 @@
     pointer-events:none; z-index:5;
   }
   #phase-note[hidden]{display:none;}
-
-  .callout{
-    position:absolute;
-    transform:translate(-50%,-140%);
-    pointer-events:none;
-    opacity:0;
-    transition:opacity .35s ease;
-    z-index:6;
-    white-space:nowrap;
-  }
-  .callout.show{opacity:1;}
-  .callout .pin{
-    width:6px; height:6px; border-radius:50%;
-    margin:0 auto 4px;
-    box-shadow:0 0 8px currentColor;
-  }
-  .callout .card{
-    background:rgba(10,15,22,.78);
-    border:1px solid var(--line);
-    border-radius:7px;
-    padding:4px 9px;
-    font-family:'IBM Plex Mono',monospace;
-    font-size:11px;
-    letter-spacing:.02em;
-    text-align:center;
-  }
-  .callout .card .evt{
-    font-family:'Manrope',sans-serif;
-    font-weight:700;
-    font-size:9.5px;
-    text-transform:uppercase;
-    letter-spacing:.08em;
-    display:block;
-    margin-bottom:1px;
-  }
-  .callout.exit .card .evt{color:var(--freefall);}
-  .callout.exit .pin{background:var(--freefall); color:var(--freefall);}
-  .callout.deploy .card .evt{color:var(--canopy);}
-  .callout.deploy .pin{background:var(--canopy); color:var(--canopy);}
 
   #panel{
     flex:0 0 auto;
@@ -192,17 +164,22 @@
     outline:none;
     cursor:pointer;
   }
+  /* Thumb color is dynamic per flight phase (2026-09-28) -- set via
+     --thumb-color/--thumb-ring custom properties on #scrubber itself in
+     JS (updateScrubberFill), since the pseudo-elements below can't be
+     targeted directly but do inherit custom properties. Falls back to
+     the old fixed orange/accent-dim if JS hasn't run yet. */
   #scrubber::-webkit-slider-thumb{
     -webkit-appearance:none;
     width:14px; height:14px; border-radius:50%;
-    background:var(--accent);
+    background:var(--thumb-color, var(--accent));
     border:2px solid var(--bg);
-    box-shadow:0 0 0 1px var(--accent-dim);
+    box-shadow:0 0 0 1px var(--thumb-ring, var(--accent-dim));
     cursor:pointer;
   }
   #scrubber::-moz-range-thumb{
     width:14px; height:14px; border-radius:50%;
-    background:var(--accent); border:2px solid var(--bg);
+    background:var(--thumb-color, var(--accent)); border:2px solid var(--bg);
     cursor:pointer;
   }
 
@@ -214,11 +191,16 @@
     min-width:74px; text-align:right;
   }
 
-  #speed-wrap{
+  /* Merged settings control (2026-09-27) -- replaces the separate speed and
+     camera icon buttons (and the icon-row line they used to live on) with one
+     gear icon back on the scrub row. A single narrow icon fits there safely,
+     unlike the two it replaces, so this also removes a whole row of vertical
+     space that was crowding the 3D view on phone-width screens. */
+  #settings-wrap{
     position:relative;
     flex:0 0 auto;
   }
-  #speedbtn{
+  #settingsbtn{
     flex:0 0 auto;
     width:28px; height:28px;
     border-radius:50%;
@@ -228,9 +210,9 @@
     display:flex; align-items:center; justify-content:center;
     cursor:pointer;
   }
-  #speedbtn svg{width:14px; height:14px;}
-  #speedbtn:active{background:var(--line);}
-  #speed-menu{
+  #settingsbtn svg{width:14px; height:14px;}
+  #settingsbtn:active{background:var(--line);}
+  #settings-menu{
     position:absolute;
     bottom:calc(100% + 6px);
     right:0;
@@ -238,14 +220,16 @@
     flex-direction:column;
     gap:2px;
     padding:4px;
-    min-width:130px;
+    min-width:160px;
+    max-height:min(70vh, 320px);
+    overflow-y:auto;
     background:rgba(10,15,22,.94);
     border:1px solid var(--line);
     border-radius:8px;
     z-index:10;
   }
-  #speed-menu[hidden]{display:none;}
-  #speed-menu .speed-menu-title{
+  #settings-menu[hidden]{display:none;}
+  #settings-menu .settings-menu-title{
     padding:6px 10px 5px;
     font-size:10px;
     color:var(--text-dim);
@@ -254,7 +238,10 @@
     border-bottom:1px solid var(--line);
     margin-bottom:2px;
   }
-  #speed-menu button{
+  #settings-menu .settings-menu-title:not(:first-child){
+    margin-top:6px;
+  }
+  #settings-menu button{
     text-align:left;
     padding:7px 10px;
     border-radius:6px;
@@ -264,17 +251,82 @@
     font-family:'Manrope',sans-serif;
     font-size:12px;
     cursor:pointer;
+    display:flex; align-items:center; gap:8px;
   }
-  #speed-menu button:active{background:var(--line);}
-  #speed-menu button.active{
+  #settings-menu button svg{width:14px; height:14px; flex:0 0 auto;}
+  #settings-menu button:active{background:var(--line);}
+  #settings-menu button.active{
     background:var(--surface-2);
     color:var(--accent);
     font-weight:700;
   }
 
+  /* Stats info button + menu (added 2026-09-27, placement revised same day
+     per the user): rides along as a 6th grid cell in #stats rather than an
+     absolutely-positioned overlay above it -- desktop's 6th column is a
+     narrow `auto` column added to the right of Distance (the 5 real stat
+     columns stay equal-width, unchanged); mobile's 3-column layout already
+     leaves row 2 with an empty 3rd slot (Glide, Distance, ---), which this
+     cell now fills exactly, so nothing new needed on mobile at all. Still no
+     new flow height anywhere, and no interactive options -- just a reference
+     popover -- so it shares the settings menu's open/close/outside-click
+     conventions but not its data-driven button-list logic. */
+  .stats-info-cell{
+    position:relative;
+    padding:6px 10px;
+    border-left:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+  }
+  #statsinfobtn{
+    width:16px; height:16px;
+    border-radius:50%;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    color:var(--text-dim);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px; font-weight:700;
+  }
+  #statsinfobtn:active{background:var(--line);}
+  #stats-info-menu{
+    position:absolute;
+    bottom:calc(100% + 6px);
+    right:0;
+    width:min(280px, 80vw);
+    max-height:min(70vh, 360px);
+    overflow-y:auto;
+    padding:10px 12px;
+    background:rgba(10,15,22,.94);
+    border:1px solid var(--line);
+    border-radius:8px;
+    z-index:10;
+  }
+  #stats-info-menu[hidden]{display:none;}
+  #stats-info-menu .stats-info-title{
+    font-size:10px;
+    color:var(--text-dim);
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    border-bottom:1px solid var(--line);
+    padding-bottom:6px;
+    margin-bottom:8px;
+  }
+  .stats-info-row + .stats-info-row{ margin-top:9px; }
+  .stats-info-row .stats-info-term{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px; font-weight:700;
+    color:var(--text);
+  }
+  .stats-info-row .stats-info-def{
+    font-size:11.5px; line-height:1.4;
+    color:var(--text-dim);
+    margin-top:2px;
+  }
+
   #stats{
     display:grid;
-    grid-template-columns:repeat(5, 1fr);
+    grid-template-columns:repeat(5, 1fr) auto;
     gap:0;
   }
   .stat{
@@ -303,8 +355,12 @@
   .stat.accent .stat-value{color:var(--accent);}
 
   @media (max-width:420px){
-    #stats{grid-template-columns:repeat(2, 1fr); row-gap:8px;}
-    .stat:nth-child(2n+1){border-left:none; padding-left:2px;}
+    /* 3 columns instead of 2 (changed 2026-09-27): 5 stat tiles land as 3-then-2
+       instead of 2-2-1, saving the orphaned third row that was crowding the 3D
+       view on phone-width screens. Now 6 cells total (5 stats + the info
+       button's cell) -- lands exactly 3-then-3, no orphaned slot at all. */
+    #stats{grid-template-columns:repeat(3, 1fr); row-gap:8px;}
+    .stat:nth-child(3n+1){border-left:none; padding-left:2px;}
   }
 </style>
 
@@ -546,13 +602,21 @@
 <div id="stage">
   <canvas id="gl"></canvas>
   <div id="hint">drag to orbit · scroll to zoom</div>
+  <!-- Condensed 2026-09-27 (was 5 rows, then 3) -- mobile screens were
+       getting crowded. Freefall/Canopy rows double as their matching event
+       row, condensed to just the phase name + a bare altitude number (no
+       "Exit"/"Under Canopy" wording -- the row's own dot color already says
+       which one it is). Landing (re-added as a third row 2026-09-27, after
+       briefly living as a floating label next to the 3D marker -- that label
+       moved on screen as the camera orbited, which read as jittery) has no
+       measurement shown since landing is implicitly ~0 AGL; it appears the
+       moment the green marker does, same reveal timing as the marker. -->
   <div id="legend" hidden>
-    <div class="row"><span class="dot" style="background:var(--freefall)"></span>Freefall / wingsuit</div>
-    <div class="row"><span class="dot" style="background:var(--canopy)"></span>Canopy</div>
+    <div class="row"><span class="dot" style="background:var(--freefall)"></span><span id="legend-freefall-text">Freefall</span></div>
+    <div class="row"><span class="dot" style="background:var(--canopy)"></span><span>Canopy</span><span id="legend-canopy-open-detail" hidden></span></div>
+    <div class="row" id="legend-landing-row" hidden><span class="dot" style="background:var(--landing)"></span><span>Landing</span></div>
   </div>
   <div id="phase-note" hidden></div>
-  <div id="callout-exit" class="callout exit"><div class="pin"></div><div class="card"><span class="evt">Exit</span><span class="alt"></span></div></div>
-  <div id="callout-deploy" class="callout deploy"><div class="pin"></div><div class="card"><span class="evt">Deployment</span><span class="alt"></span></div></div>
 </div>
 
 <div id="panel">
@@ -560,9 +624,9 @@
     <button id="playbtn" aria-label="Play"></button>
     <input id="scrubber" type="range" min="0" max="1000" value="0" step="1" aria-label="Playback position">
     <div id="playback-time">0:00</div>
-    <div id="speed-wrap">
-      <button id="speedbtn" aria-haspopup="true" aria-expanded="false" aria-label="Playback speed"></button>
-      <div id="speed-menu" hidden role="menu"></div>
+    <div id="settings-wrap">
+      <button id="settingsbtn" aria-haspopup="true" aria-expanded="false" aria-label="Settings"></button>
+      <div id="settings-menu" hidden role="menu"></div>
     </div>
   </div>
   <div id="stats">
@@ -570,26 +634,38 @@
       <div class="stat-label">Altitude</div>
       <div class="stat-value"><span id="stat-alt">0</span><span class="unit">ft</span></div>
     </div>
-    <div class="stat accent">
+    <div class="stat">
       <div class="stat-label">Vert Speed</div>
-      <div class="stat-value"><span id="stat-vspeed">0</span><span class="unit">fpm</span></div>
+      <div class="stat-value"><span id="stat-vspeed">0</span><span class="unit">mph</span></div>
     </div>
     <div class="stat">
       <div class="stat-label">Gnd Speed</div>
       <div class="stat-value"><span id="stat-hspeed">0</span><span class="unit">mph</span></div>
     </div>
     <div class="stat">
-      <div class="stat-label">Glide</div>
+      <div class="stat-label" id="stat-glide-label">Glide</div>
       <div class="stat-value" id="stat-glide">—</div>
     </div>
     <div class="stat">
       <div class="stat-label">Distance</div>
       <div class="stat-value"><span id="stat-dist">0</span><span class="unit">mi</span></div>
     </div>
+    <div class="stats-info-cell">
+      <button id="statsinfobtn" aria-haspopup="true" aria-expanded="false" aria-label="What these stats mean">i</button>
+      <div id="stats-info-menu" hidden role="dialog" aria-label="Stat definitions">
+        <div class="stats-info-title" aria-hidden="true">What these mean</div>
+        <div class="stats-info-row"><div class="stats-info-term">Altitude</div><div class="stats-info-def">Height above the ground at takeoff/landing, from the phone's barometer.</div></div>
+        <div class="stats-info-row"><div class="stats-info-term">Vert Speed</div><div class="stats-info-def">Descent rate, from barometric altitude change. 3-second rolling average.</div></div>
+        <div class="stats-info-row"><div class="stats-info-term">Gnd Speed</div><div class="stats-info-def">Horizontal speed over the ground, from GPS position change. 3-second rolling average.</div></div>
+        <div class="stats-info-row"><div class="stats-info-term">Glide · FF / CP</div><div class="stats-info-def">Horizontal distance covered per foot of altitude dropped. FF = freefall, since exit; CP = canopy, since opening. A per-phase summary, not a live instant number.</div></div>
+        <div class="stats-info-row"><div class="stats-info-term">Distance</div><div class="stats-info-def">Total horizontal ground track covered since exit.</div></div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
+
 function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   'use strict';
 
@@ -607,18 +683,39 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   const MPS_TO_MPH = 2.23694;
   const MPS_TO_FPM = 196.850;
 
-  // ---------- phase detection config (best-guess starting values —  ----------
-  // ---------- tune against real flight data + VOG cross-check later) ----------
+  // ---------- phase detection config ----------
+  // Tuned 2026-09-26 against 3 real wingsuit jumps (same dropzone/day), cross-checked
+  // against independent VOG audible-altimeter exit/canopy altitudes. Real observed
+  // vertical-speed bands: climb ~ -2 to +12 m/s, wingsuit freefall ~ -16 to -47 m/s
+  // (median ~-27, remarkably consistent across all 3 jumps), settled canopy ~ -13 to
+  // +2 m/s (including intentional spirals/sharp turns for vertical separation).
+  // freefallVSpeedMps moved from -8 to -16 specifically so a hard canopy spiral
+  // (observed sink rate down to ~-13 m/s) can no longer cross into the FREEFALL
+  // band and get mistaken for a second "opening" partway through the canopy ride.
+  // smoothHalfWindowSeconds widened 1.0->2.5: the original narrow window produced a
+  // noisy per-sample vspeed estimate that briefly (spuriously) crossed out of the
+  // FREEFALL band mid-freefall on real data (e.g. during a wingsuit flare/transition),
+  // which combined with the short sustain window below to misfire an early "opening".
+  // minSustainDeploySeconds (new) is a longer, separate sustain requirement used only
+  // while hunting for the *first* real deployment after exit: it prevents exactly that
+  // kind of brief in-freefall vspeed dip from being mistaken for canopy opening, without
+  // slowing down every other phase transition. maxSampleGapSeconds (new) guards against
+  // a different real failure mode found on Flight 3 (a ~30-50s GPS/logging gap right
+  // after deployment): without it, two samples that happen to bracket a long gap can
+  // spuriously satisfy a sustain-duration check even though nothing was actually
+  // observed continuously in between.
   const PHASE_CONFIG = {
-    freefallVSpeedMps: -8,     // sustained vertical speed more negative than this => freefall/wingsuit
-    canopyVSpeedMaxMps: -1,    // least-negative bound still counted as canopy sink rate
-    minSustainSeconds: 2.0,    // a candidate phase must hold this long before we trust it
-    smoothHalfWindowSeconds: 1.0, // half-width of the time window used to smooth vertical speed
+    freefallVSpeedMps: -16,    // sustained vertical speed more negative than this => freefall/wingsuit
+    canopyVSpeedMaxMps: 2,     // least-negative bound still counted as canopy sink rate (covers spirals/flares)
+    minSustainSeconds: 2.0,    // a candidate phase must hold this long before we trust it (exit + all other transitions)
+    minSustainDeploySeconds: 10.0, // longer sustain required specifically for the first FREEFALL->CANOPY (deployment) confirmation
+    maxSampleGapSeconds: 3.0,  // a candidate can't be confirmed across a real sample gap longer than this
+    smoothHalfWindowSeconds: 2.5, // half-width of the time window used to smooth vertical speed
     transitionBlendSeconds: 4.0,  // how long the deployment color blend (yellow->white) spans
   };
 
-  const COLOR_FREEFALL = new THREE.Color(0xffcc33);
-  const COLOR_CANOPY = new THREE.Color(0xeef4f8);
+  const COLOR_FREEFALL = new THREE.Color(0xffd23f);
+  const COLOR_CANOPY = new THREE.Color(0xffffff);
   const COLOR_DEFAULT = new THREE.Color(0x4fe0f0); // fallback when no exit is detected (e.g. non-flight test data)
 
   // ---------- base per-point series (full recording) ----------
@@ -649,6 +746,12 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     let deployOnsetIdx = -1, deployConfirmedIdx = -1;
 
     for(let i=0;i<n;i++){
+      // a real gap in samples (missed GPS/baro fixes) can't itself count as
+      // evidence a candidate phase held steady, so don't let it bridge a sustain check
+      if(i>0 && (pts[i].t - pts[i-1].t) > PHASE_CONFIG.maxSampleGapSeconds){
+        candidate = null;
+      }
+
       const v = vSmooth[i];
       let rawBand;
       if(v < PHASE_CONFIG.freefallVSpeedMps) rawBand = 'FREEFALL';
@@ -660,6 +763,15 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
       else if(rawBand === 'MID') desired = haveSeenFreefall ? 'CANOPY' : 'PLANE';
       else desired = 'PLANE';
 
+      // while hunting for the first real deployment, treat ANY move away from
+      // FREEFALL as suspect and require the longer sustain window -- real wingsuit
+      // freefall can include brief near-zero/positive vspeed moments (flares,
+      // transitions) that must not be mistaken for canopy opening
+      const awaitingDeploy = haveSeenFreefall && deployOnsetIdx === -1;
+      const requiredSustain = (awaitingDeploy && desired !== 'FREEFALL')
+        ? PHASE_CONFIG.minSustainDeploySeconds
+        : PHASE_CONFIG.minSustainSeconds;
+
       if(desired === confirmed){
         candidate = null;
       } else {
@@ -667,7 +779,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
           candidate = desired;
           candidateStartT = pts[i].t;
           candidateStartIdx = i;
-        } else if(pts[i].t - candidateStartT >= PHASE_CONFIG.minSustainSeconds){
+        } else if(pts[i].t - candidateStartT >= requiredSustain){
           confirmed = desired;
           if(desired === 'FREEFALL' && exitOnsetIdx === -1){
             haveSeenFreefall = true;
@@ -709,52 +821,177 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     cumHorizDist[i] = cumHorizDist[i-1] + Math.hypot(dx,dz);
   }
 
-  const totalDuration = pts[N-1].t - pts[0].t;
+  // ---------- landing detection (2026-09-27) ----------
+  // Two different problems, not one shared threshold: the real Kotlin recorder's
+  // auto-stop has to be conservative -- a false positive there permanently loses
+  // a real flight, so it's fine to let a few extra rows pile up in the CSV
+  // afterward. The viewer's own "where does this flight visually end" mark is
+  // purely cosmetic -- nothing is deleted here, so it can clip much closer to
+  // actual touchdown. Both reuse the exact same baro-derived smoothed vertical
+  // speed already validated for phase detection above, deliberately NOT GPS
+  // `speed` -- GPS speed is confirmed unreliable right after touchdown (Flight 2
+  // got stuck reporting a bogus ~330mph for 48s straight after the phone was
+  // already sitting still on the ground; see PROJECT_CONTEXT item 10).
+  // The viewer's own scrubber/timeline is now actually clipped to the landing
+  // point (2026-09-27) -- earlier this only placed a visual mark, deliberately
+  // leaving playback running through the full raw recording so real flight
+  // data (including flukey ones, like Flight 3's bouncy tail) could be
+  // checked against the detector before trusting it near the actual recorder.
+  // That validation is done, so this is now how it's meant to behave long
+  // term: the recorder's own conservative auto-stop (with its safety buffer)
+  // is a completely separate, still-unbuilt piece that only affects the raw
+  // CSV -- it has no bearing on where the viewer stops playing back.
+  const LANDING_CONFIG = {
+    vSpeedBandMps: 1.5,          // "stationary" vertical-speed band, +/- this many m/s
+    viewerSustainSeconds: 6,     // tight -- viewer clip mark, cosmetic only, nothing at risk
+    recorderSustainSeconds: 25,  // longer -- how long before the real recorder logic would even call this "landed"
+    recorderBufferSeconds: 90,   // extra margin stacked on top before the real recorder would actually cut the recording
+    // (bumped 75->90 2026-09-27: 75s only cleared Flight 1's real manual-stop
+    // time by ~15s -- real but thin margin. 90s gives more comfortable headroom
+    // above the worst observed real housekeeping time (~58s, Flight 1).)
+  };
 
-  // bounding box (of the rendered/trimmed segment only, so framing isn't skewed by the plane ride)
+  // First index (searched only after canopy/deployment is already confirmed)
+  // where smoothed vertical speed stays inside the stationary band for at
+  // least sustainSeconds -- same "first sustained transition" shape as
+  // classifyPhases() above, not a single-sample threshold crossing.
+  function detectLanding(pts, fromIdx, sustainSeconds){
+    if(fromIdx < 0) return -1;
+    let candidateStartIdx = -1, candidateStartT = 0;
+    for(let i=fromIdx;i<pts.length;i++){
+      if(i>fromIdx && (pts[i].t - pts[i-1].t) > PHASE_CONFIG.maxSampleGapSeconds){
+        candidateStartIdx = -1;
+      }
+      const stationary = Math.abs(smoothedVSpeedAt(i, pts)) <= LANDING_CONFIG.vSpeedBandMps;
+      if(stationary){
+        if(candidateStartIdx === -1){ candidateStartIdx = i; candidateStartT = pts[i].t; }
+        else if(pts[i].t - candidateStartT >= sustainSeconds){ return candidateStartIdx; }
+      } else {
+        candidateStartIdx = -1;
+      }
+    }
+    return -1;
+  }
+
+  const landingSearchStart = phases.hasDeployment ? deployOnsetRel : -1;
+  const viewerLandingIdx = detectLanding(pts, landingSearchStart, LANDING_CONFIG.viewerSustainSeconds);
+
+  // Viewer playback's actual end point -- landing when we found one, else the
+  // full raw recording (falls back gracefully rather than showing nothing).
+  const viewerEndIdx = viewerLandingIdx !== -1 ? viewerLandingIdx : N-1;
+  const totalDuration = pts[viewerEndIdx].t - pts[0].t;
+
+  // Bounding box of exit-through-landing only (2026-09-27: was the whole
+  // rendered/trimmed segment, i.e. exit through the end of the raw recording
+  // -- now that playback actually stops at landing, any GPS wander after
+  // touchdown, like walking around packing up gear, no longer gets to widen
+  // the framing for a stretch of flight that's never shown).
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,minZ=Infinity,maxZ=-Infinity;
-  pts.forEach(p=>{
+  for(let i=0;i<=viewerEndIdx;i++){
+    const p = pts[i];
     minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x);
     minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y);
     minZ=Math.min(minZ,p.z); maxZ=Math.max(maxZ,p.z);
-  });
+  }
   const center = new THREE.Vector3((minX+maxX)/2, (minY+maxY)/2, (minZ+maxZ)/2);
   const span = Math.max(maxX-minX, maxZ-minZ, 20);
   const diag = Math.hypot(maxX-minX, maxY-minY, maxZ-minZ) || 100;
 
+  // Overview-mode orbit target (added 2026-09-27): the user flagged that
+  // landing sits near the edge of the framed view, not because the frame is
+  // wrong but because `center` above is the bounding box's pure geometric
+  // midpoint, which isn't necessarily anywhere near landing if the path
+  // curves/drifts a lot before touchdown. Trying "Option A" of the two
+  // discussed: blend the orbit target partway toward the landing point
+  // instead of re-deriving the box itself, so `diag`/`span` (and therefore
+  // zoom/framed area) are completely untouched -- this only re-aims where the
+  // camera looks, at zero size cost. CENTER_LANDING_BLEND is the one knob:
+  // 0 = today's pure bbox center, 1 = fully centered on landing (which is
+  // "Option C", the one explicitly NOT wanted since it can force a much
+  // bigger radius). 0.5 is a first attempt for comparison against "Option B"
+  // (center between exit and landing specifically), which the user's gut
+  // preferred but wanted to see this side-by-side with first.
+  const CENTER_LANDING_BLEND = 0.5;
+  const landingPt = viewerLandingIdx !== -1
+    ? new THREE.Vector3(pts[viewerLandingIdx].x, pts[viewerLandingIdx].y, pts[viewerLandingIdx].z)
+    : null;
+  const overviewTarget = landingPt ? center.clone().lerp(landingPt, CENTER_LANDING_BLEND) : center;
+
   // ---------- per-point color (phase + smooth blend through the deployment window) ----------
   function colorForIndex(i){
+    // Hard cutoff at deployOnsetRel (2026-09-27) -- that's the same "first
+    // sustained canopy reading" point the canopy marker sits on, so the line
+    // switches from freefall yellow to canopy white right there instead of
+    // blending across to deployConfirmedRel, which let yellow visibly bleed
+    // past the marker.
     if(!phases.hasExit) return COLOR_DEFAULT;
     if(!phases.hasDeployment || i < deployOnsetRel) return COLOR_FREEFALL;
-    if(i >= deployConfirmedRel) return COLOR_CANOPY;
-    const span = Math.max(pts[deployConfirmedRel].t - pts[deployOnsetRel].t, 0.5);
-    const frac = (pts[i].t - pts[deployOnsetRel].t) / span;
-    return COLOR_FREEFALL.clone().lerp(COLOR_CANOPY, Math.min(1, Math.max(0, frac)));
+    return COLOR_CANOPY;
   }
 
   // ---------- three.js scene ----------
   const canvas = document.getElementById('gl');
   const stage = document.getElementById('stage');
-  const renderer = new THREE.WebGLRenderer({canvas, antialias:false, alpha:false});
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.5));
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false});
+  // pixelRatio cap: 1.5 -> 2.0 (2026-09-27, first increment of the line-sharpness
+  // pass). Most phones/laptops report devicePixelRatio 2-3, so the old 1.5 cap
+  // was already discarding real resolution on nearly every real device this
+  // runs on. This is the cheaper, more controllable of the two sharpness levers
+  // (vs. antialias, which is closer to an on/off switch) -- raise incrementally
+  // and judge before reaching for antialiasing on top.
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2.0));
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0f16);
-  scene.fog = new THREE.Fog(0x0a0f16, diag*1.2, diag*4.5);
+  // Sky gradient backdrop (2026-09-28 reskin, phase 2; reverted back to this
+  // 2026-09-29 after a 3D sky-dome experiment -- see below). Matches the
+  // design handoff's viewer-screen gradient (180deg, #0C3D78 0% -> #2F7FCE
+  // 60% -> #BFE0F5 100%). Three.js scene.background can't take a CSS gradient
+  // directly, so it's drawn onto a small canvas and used as a texture -- this
+  // renders as a fixed 2D backdrop stretched to the viewport; it does not
+  // rotate/repaint as the camera orbits (looking straight up shows the same
+  // colors as looking level).
+  //
+  // 2026-09-29 sky-dome attempt, tried and reverted: replaced this with a
+  // vertex-colored inverted sphere so the gradient would actually track
+  // camera pitch. Two rounds of fixes (pacing of the color stops, then an
+  // enlarged ground plane meant to hide the sphere's exposed lower
+  // hemisphere past the map's edges) both failed to clear a persistent,
+  // unexplained light-colored "blob" artifact near the horizon -- and
+  // enlarging the ground plane didn't move or shrink it, which ruled out
+  // the leading theory (a gap past the map's edge) without turning up a
+  // confirmed replacement cause. Root cause never fully diagnosed; reverted
+  // back to this known-good flat gradient rather than keep iterating blind.
+  // Worth another attempt later (this file's own history above has the
+  // sphere-based approach fully written out if picked back up), ideally with
+  // actual visual access to the live WebGL frame rather than only
+  // screenshots round-tripped through chat.
+  const skyCanvas = document.createElement('canvas');
+  skyCanvas.width = 2; skyCanvas.height = 256;
+  const skyCtx = skyCanvas.getContext('2d');
+  const skyGrad = skyCtx.createLinearGradient(0, 0, 0, 256);
+  skyGrad.addColorStop(0, '#0C3D78');
+  skyGrad.addColorStop(0.6, '#2F7FCE');
+  skyGrad.addColorStop(1, '#BFE0F5');
+  skyCtx.fillStyle = skyGrad;
+  skyCtx.fillRect(0, 0, 2, 256);
+  const skyTex = new THREE.CanvasTexture(skyCanvas);
+  scene.background = skyTex;
+  // Fog matches the gradient's horizon tone (its lightest, ground-level
+  // stop), so distant ground fades into the sky's horizon color rather than
+  // the darker top-of-sky tone.
+  scene.fog = new THREE.Fog(0xBFE0F5, diag*1.2, diag*4.5);
 
   const camera = new THREE.PerspectiveCamera(50, 1, 0.1, Math.max(20000, diag*8));
 
-  // ground grid + dark fill plane — only when there's no real map image to
-  // show instead. These used to always render underneath the map image too,
-  // separated from it and from each other by tiny fixed offsets (fine at the
-  // small scale of early test data, but at real-world flight/drive scale
-  // those offsets are far smaller than depth-buffer precision at typical
-  // camera distance, causing visible z-fighting/shimmer between the grid,
-  // the fill, and the map — confirmed on real data 2026-09-21). Simplest
-  // correct fix: when a map image is present, it's the ground — don't also
-  // draw a competing grid and fill plane underneath it.
+  // ground grid, sized to bounding box with margin — only drawn when there's
+  // no real satellite image to show instead. Rendering the grid/fill plane
+  // underneath the map image caused visible z-fighting shimmer (both layers
+  // sit only ~0.005 units apart, far below depth-buffer precision at
+  // real-world/kilometer scene scale), so the two are now mutually exclusive
+  // rather than stacked.
   const haveMapImage = !!(mapImageDataUri && mapMeta && mapMeta.widthMeters > 0);
   const gridSize = Math.max(span*1.6, 40);
+
   if (!haveMapImage) {
     const gridDivisions = 24;
     const grid = new THREE.GridHelper(gridSize, gridDivisions, 0x2a3b4a, 0x1a2732);
@@ -772,7 +1009,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
 
   // real satellite imagery, textured under the flight path (optional — only
   // present when the Android app supplied a fetched image + its real-world
-  // size). When present, it's the sole ground layer (see note above).
+  // size).
   if (haveMapImage) {
     const mapTex = new THREE.TextureLoader().load(mapImageDataUri);
     // Mipmaps on + a mip-aware minFilter (LinearFilter alone ignores mips
@@ -781,11 +1018,29 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     // upload, not a per-frame cost, unlike antialiasing/pixelRatio.
     mapTex.minFilter = THREE.LinearMipmapLinearFilter;
     mapTex.generateMipmaps = true;
-    const mapGeo = new THREE.PlaneGeometry(mapMeta.widthMeters, mapMeta.heightMeters);
+    // Anisotropic filtering keeps the ground texture sharp when viewed at a
+    // shallow/grazing angle (an orbiting or low camera looking across the
+    // ground plane, e.g. during the zoomed-in landing approach) -- mipmaps
+    // alone blur more aggressively at oblique angles than a straight-down
+    // view. Capped at the GPU's actual max (typically 8-16x on modern
+    // hardware) rather than assuming a fixed value.
+    mapTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     mapTex.wrapT = THREE.RepeatWrapping;
     mapTex.wrapS = THREE.RepeatWrapping;
-    mapTex.repeat.y = -1; // the ground plane's rotation otherwise mirrors the image north-south
-    mapTex.repeat.x = -1; // ...and east-west too
+    // No repeat.x/repeat.y flip needed: THREE.Texture defaults to flipY=true
+    // (image top row -> v=1), PlaneGeometry maps v=1 to local +Y, and the
+    // plane's rotation.x=-Math.PI/2 below sends local +Y to world -Z -- which
+    // is exactly "north" in this app's local-frame convention (z is more
+    // negative further north). Local +X already maps straight to world +X
+    // (east), matching the image's left-to-right = west-to-east layout. So
+    // the untouched default orientation already lines up correctly; a
+    // previous version of this file forced repeat.x=-1 and repeat.y=-1 here
+    // (a 180-degree flip, tuned against an older placeholder test image),
+    // which caused a real satellite image to render rotated 180 degrees out
+    // of alignment with the flight path -- found and fixed 2026-09-27,
+    // confirmed against the user's own marked-up satellite image first in a
+    // private test artifact before porting the fix here.
+    const mapGeo = new THREE.PlaneGeometry(mapMeta.widthMeters, mapMeta.heightMeters);
     const mapMat = new THREE.MeshBasicMaterial({map: mapTex});
     const mapMesh = new THREE.Mesh(mapGeo, mapMat);
     mapMesh.rotation.x = -Math.PI/2;
@@ -797,12 +1052,46 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     scene.add(mapMesh);
   }
 
-  const positions = new Float32Array(N*3);
-  const vertexColors = new Float32Array(N*3);
-  for(let i=0;i<N;i++){
-    positions[i*3]=pts[i].x; positions[i*3+1]=pts[i].y; positions[i*3+2]=pts[i].z;
-    const c = colorForIndex(i);
-    vertexColors[i*3]=c.r; vertexColors[i*3+1]=c.g; vertexColors[i*3+2]=c.b;
+  // ---------- rendered-line geometry: a Catmull-Rom curve through the exact
+  // same raw GPS/baro points, not a smoothing/denoising pass. No point is
+  // moved or averaged away -- this only rounds the visual transition between
+  // real samples (straight-line segments read as a harsh zig-zag, especially
+  // where samples are sparse) into a curved one that still passes exactly
+  // through every real point. 'centripetal' parametrization (three.js's
+  // default) is deliberately kept over the uniform 'catmullrom' type -- it's
+  // built to resist overshoot/looping on unevenly-spaced points, which real
+  // GPS samples are (sparse across dropouts, dense otherwise), so a genuine
+  // sharp turn (e.g. a real canopy spiral) still reads as a tight, correctly
+  // shaped curve rather than a rounded-off corner or an overshoot loop past it.
+  // All playback/stats/phase logic below still keys off the raw `pts`/`N` --
+  // only this rendered line uses the denser curve points.
+  const CURVE_SUBDIV = 6; // interpolated segments drawn per real GPS segment
+  let renderPositions = pts;
+  let renderN = N;
+  let renderIdxForSample = (i) => i; // raw sample index -> render-vertex index
+  if (N >= 3) {
+    const curve = new THREE.CatmullRomCurve3(
+      pts.map(p => new THREE.Vector3(p.x, p.y, p.z)),
+      false, 'centripetal', 0.5
+    );
+    const totalDivisions = (N - 1) * CURVE_SUBDIV;
+    renderPositions = curve.getPoints(totalDivisions); // length totalDivisions+1; exact at multiples of CURVE_SUBDIV
+    renderN = renderPositions.length;
+    renderIdxForSample = (i) => Math.min(renderN - 1, i * CURVE_SUBDIV);
+  }
+
+  const positions = new Float32Array(renderN*3);
+  const vertexColors = new Float32Array(renderN*3);
+  for(let j=0;j<renderN;j++){
+    const rp = renderPositions[j];
+    positions[j*3]=rp.x; positions[j*3+1]=rp.y; positions[j*3+2]=rp.z;
+    // color keyed off the nearest real sample -- the phase blend colorForIndex
+    // already does its own smooth lerp across the deployment window in real
+    // sample-time, so nearest-sample here is visually indistinguishable from
+    // interpolating it further per render-vertex.
+    const nearestRaw = Math.min(N-1, Math.round(j/CURVE_SUBDIV));
+    const c = colorForIndex(nearestRaw);
+    vertexColors[j*3]=c.r; vertexColors[j*3+1]=c.g; vertexColors[j*3+2]=c.b;
   }
 
   // live traced path (grows as playback advances — nothing is drawn ahead of
@@ -826,6 +1115,77 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   liveLine.geometry.instanceCount = 0; // nothing revealed until playback starts
   scene.add(liveLine);
 
+  // ground-shadow trace: a translucent flat projection of the same path onto
+  // the ground plane (same x/z as each rendered vertex, y pinned to minY),
+  // so the 3D path always has a "shadow" reading on the ground -- helps
+  // judge horizontal position/shape independent of altitude, and reads nicely
+  // as a visual. Reuses the exact same vertex layout and reveal timing as the
+  // live line above so the two never desync.
+  const groundPositions = new Float32Array(renderN*3);
+  for(let j=0;j<renderN;j++){
+    groundPositions[j*3] = positions[j*3];
+    groundPositions[j*3+1] = minY - 0.03; // just above the ground plane/map to avoid z-fighting
+    groundPositions[j*3+2] = positions[j*3+2];
+  }
+  const groundGeo2 = new THREE.LineGeometry();
+  groundGeo2.setPositions(groundPositions);
+  groundGeo2.setColors(vertexColors); // same phase colors, just dimmed via material opacity below
+  const groundMat = new THREE.LineMaterial({
+    vertexColors: true,
+    linewidth: 2,
+    transparent: true,
+    opacity: 0.35,
+    depthWrite: false,
+  });
+  groundMat.resolution.set(stage.clientWidth, stage.clientHeight);
+  const groundLine = new THREE.Line2(groundGeo2, groundMat);
+  groundLine.computeLineDistances();
+  groundLine.geometry.instanceCount = 0;
+  scene.add(groundLine);
+
+  // curtain: a translucent vertical "wall" connecting the ground-shadow line
+  // up to the flight-trace line at every point along the path -- fills in
+  // the visual gap between the two so altitude-over-ground-track reads as
+  // one continuous surface instead of two lines you have to mentally link.
+  // Built as a triangle-strip ribbon (bottom rung = ground point, top rung =
+  // path point), phase-colored to match the two lines but heavily faded, and
+  // double-sided/no-depth-write so it never occludes the marker or legend.
+  // Reveals in lockstep with the live line and ground line (synced below).
+  const curtainPositions = new Float32Array(renderN*2*3);
+  const curtainColors = new Float32Array(renderN*2*3);
+  for(let j=0;j<renderN;j++){
+    const bx=groundPositions[j*3], by=groundPositions[j*3+1], bz=groundPositions[j*3+2];
+    const tx=positions[j*3], ty=positions[j*3+1], tz=positions[j*3+2];
+    curtainPositions[j*6+0]=bx; curtainPositions[j*6+1]=by; curtainPositions[j*6+2]=bz;
+    curtainPositions[j*6+3]=tx; curtainPositions[j*6+4]=ty; curtainPositions[j*6+5]=tz;
+    const cr=vertexColors[j*3], cg=vertexColors[j*3+1], cb=vertexColors[j*3+2];
+    curtainColors[j*6+0]=cr; curtainColors[j*6+1]=cg; curtainColors[j*6+2]=cb;
+    curtainColors[j*6+3]=cr; curtainColors[j*6+4]=cg; curtainColors[j*6+5]=cb;
+  }
+  const curtainIndices = new Uint32Array(Math.max(0,renderN-1)*6);
+  for(let j=0;j<renderN-1;j++){
+    const b0=j*2, t0=j*2+1, b1=(j+1)*2, t1=(j+1)*2+1;
+    const base=j*6;
+    curtainIndices[base+0]=b0; curtainIndices[base+1]=t0; curtainIndices[base+2]=b1;
+    curtainIndices[base+3]=t0; curtainIndices[base+4]=t1; curtainIndices[base+5]=b1;
+  }
+  const curtainGeo = new THREE.BufferGeometry();
+  curtainGeo.setAttribute('position', new THREE.BufferAttribute(curtainPositions, 3));
+  curtainGeo.setAttribute('color', new THREE.BufferAttribute(curtainColors, 3));
+  curtainGeo.setIndex(new THREE.BufferAttribute(curtainIndices, 1));
+  curtainGeo.setDrawRange(0, 0); // nothing revealed until playback starts
+  const curtainMat = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.12, // bumped from 0.06 (2026-09-28) -- the wall read as too
+                    // faint against the new gradient sky + map texture,
+                    // still meant to stay clearly see-through
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const curtainMesh = new THREE.Mesh(curtainGeo, curtainMat);
+  scene.add(curtainMesh);
+
   // current position marker: bright core + soft glow sprite (tinted to current phase color)
   const markerGeo = new THREE.SphereGeometry(Math.max(diag*0.006, 0.6), 16, 16);
   const markerMat = new THREE.MeshBasicMaterial({color:0xffffff});
@@ -844,34 +1204,89 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     ctx.fillRect(0,0,size,size);
     return new THREE.CanvasTexture(c);
   }
-  const glowMat = new THREE.SpriteMaterial({map:makeGlowTexture(), color:0x4fe0f0, transparent:true, depthWrite:false});
+  const glowMat = new THREE.SpriteMaterial({map:makeGlowTexture(), color:0xffffff, transparent:true, depthWrite:false});
   const glow = new THREE.Sprite(glowMat);
   const glowScale = Math.max(diag*0.05, 4);
   glow.scale.set(glowScale, glowScale, 1);
   scene.add(glow);
 
-  // start marker (exit point if detected, otherwise recording start)
-  function makeEndpoint(pos, color){
-    const g = new THREE.SphereGeometry(Math.max(diag*0.004,0.4), 12, 12);
+  // Event markers: small static spheres sitting directly on the 3D path --
+  // Exit / Under Canopy / Landing (added 2026-09-27, replacing the old
+  // leader-line callouts for these three). A static 3D point needs no
+  // per-frame screen-space reprojection the way a 2D leader-line callout did,
+  // so unlike that system it can't jiggle when the camera orbits -- there's
+  // simply nothing to reposition. Each is keyed to a row in the legend panel
+  // (top-right) instead of a floating card.
+  function makeEndpoint(pos, color, sizeMult){
+    const g = new THREE.SphereGeometry(Math.max(diag*0.004,0.4)*(sizeMult||1), 12, 12);
     const m = new THREE.MeshBasicMaterial({color});
     const mesh = new THREE.Mesh(g,m);
     mesh.position.copy(pos);
     scene.add(mesh);
     return mesh;
   }
-  makeEndpoint(new THREE.Vector3(pts[0].x,pts[0].y,pts[0].z), 0xff9f1c);
+  // Exit and Under Canopy markers now reuse the same freefall/canopy phase
+  // colors as the path itself (changed 2026-09-27, along with merging their
+  // legend rows into the Freefall/wingsuit and Canopy color-key rows below) --
+  // previously these were distinct accent/blue colors specifically so they'd
+  // contrast against the line, but a raised 3D sphere still reads as a
+  // separate bead from the flat line via size/shading alone, so the contrast
+  // wasn't needed to justify a 5-row legend on a page that's tight on space.
+  // exit is always at the start of the trimmed path, so it's visible from frame 1.
+  // Same yellow as the freefall line itself, so size/shading alone doesn't
+  // separate it from the line the way white-on-yellow or green-on-white does
+  // for the other two markers -- sized up (2026-09-27) so it still reads as a
+  // distinct bead rather than disappearing into the line's own start point.
+  makeEndpoint(new THREE.Vector3(pts[0].x,pts[0].y,pts[0].z), 0xffd23f, 1.7);
+  const canopyOpenMarker = phases.hasDeployment
+    ? makeEndpoint(new THREE.Vector3(pts[deployOnsetRel].x, pts[deployOnsetRel].y, pts[deployOnsetRel].z), 0xffffff)
+    : null;
+  if(canopyOpenMarker) canopyOpenMarker.visible = false; // revealed once playback reaches it, see render()
+  const landingMarker = viewerLandingIdx !== -1
+    ? makeEndpoint(new THREE.Vector3(pts[viewerLandingIdx].x, pts[viewerLandingIdx].y, pts[viewerLandingIdx].z), 0x57e08a)
+    : null;
+  if(landingMarker) landingMarker.visible = false;
 
   // ---------- custom orbit camera (no addon dependency) ----------
   let theta = Math.PI*0.25, phi = Math.PI*0.32;
   let radius = Math.max(diag*1.15, 30);
   const minRadius = Math.max(diag*0.08, 3), maxRadius = diag*6;
 
+  // Auto-zoom: starts at the default (zoomed-out) radius above and slowly
+  // eases in as the marker's altitude drops toward the ground -- gives a
+  // wide establishing view early and a closer view by landing, with no
+  // input needed. The moment the user manually zooms (wheel or pinch) this
+  // stops adjusting `radius` for the rest of the session -- their setting
+  // wins from then on, even if they scrub back or restart playback (this
+  // flag is deliberately never reset).
+  let userHasZoomed = false;
+  const AUTO_ZOOM_FAR_RADIUS = radius; // matches the existing default start
+  const AUTO_ZOOM_NEAR_RADIUS = Math.max(diag*0.35, minRadius*2);
+  const AUTO_ZOOM_EASE = 0.015; // slow, deliberately gentler than CAMERA_EASE
+
+  // Two camera modes, toggled by the chrome button below: "follow" chases the
+  // playback marker (what's happening right now), "overview" stays anchored on
+  // `overviewTarget` -- the bounding box's center blended partway toward the
+  // landing point (see CENTER_LANDING_BLEND above), not the pure geometric
+  // center anymore as of 2026-09-27. Both share the same zoom/orbit controls
+  // (theta/phi/radius) -- only what point the camera orbits around changes.
+  let followCamera = true;
+  // the point the camera currently orbits -- eased toward whichever target is
+  // desired each frame (see the animation loop below) rather than snapped to
+  // it, so switching modes or a fast-moving marker doesn't jump/jar the view
+  const cameraTarget = new THREE.Vector3(pts[0].x, pts[0].y, pts[0].z);
+  const CAMERA_EASE = 0.08; // per-frame lerp factor toward the desired target
+  // updated every render(frac) call to the marker's current (already-interpolated)
+  // world position -- read here so the camera can keep tracking it every animation
+  // frame even when render() itself isn't being re-invoked (e.g. paused, no scrub)
+  const markerWorldPos = new THREE.Vector3(pts[0].x, pts[0].y, pts[0].z);
+
   function updateCamera(){
-    const cx = center.x + radius*Math.sin(phi)*Math.sin(theta);
-    const cy = center.y + radius*Math.cos(phi);
-    const cz = center.z + radius*Math.sin(phi)*Math.cos(theta);
+    const cx = cameraTarget.x + radius*Math.sin(phi)*Math.sin(theta);
+    const cy = cameraTarget.y + radius*Math.cos(phi);
+    const cz = cameraTarget.z + radius*Math.sin(phi)*Math.cos(theta);
     camera.position.set(cx,cy,cz);
-    camera.lookAt(center);
+    camera.lookAt(cameraTarget);
   }
   updateCamera();
 
@@ -903,6 +1318,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
       const [a,b] = [...pointers.values()];
       const d = Math.hypot(a.x-b.x, a.y-b.y);
       radius = Math.min(maxRadius, Math.max(minRadius, pinchStartRadius * (pinchStartDist/Math.max(d,1))));
+      userHasZoomed = true; // pinch: hand zoom control to the user permanently
       updateCamera();
       return;
     }
@@ -925,6 +1341,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   stage.addEventListener('wheel', e=>{
     e.preventDefault();
     radius = Math.min(maxRadius, Math.max(minRadius, radius * (1 + e.deltaY*0.001)));
+    userHasZoomed = true; // wheel: hand zoom control to the user permanently
     updateCamera();
   }, {passive:false});
   setTimeout(showHint, 600);
@@ -935,6 +1352,7 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     camera.aspect = w/Math.max(h,1);
     camera.updateProjectionMatrix();
     liveMat.resolution.set(w,h); // fat-line width is resolution-dependent — keep in sync
+    groundMat.resolution.set(w,h);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -949,29 +1367,36 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     phaseNoteEl.textContent = 'No exit detected in this log — showing the full recording (phase coloring needs a real skydive to trigger).';
   }
 
-  // ---------- callouts (projected from 3D onto the 2D overlay) ----------
-  const calloutExitEl = document.getElementById('callout-exit');
-  const calloutDeployEl = document.getElementById('callout-deploy');
-  const exitAnchor = new THREE.Vector3(pts[0].x, pts[0].y, pts[0].z);
-  const deployAnchor = phases.hasDeployment
-    ? new THREE.Vector3(pts[deployOnsetRel].x, pts[deployOnsetRel].y, pts[deployOnsetRel].z)
-    : null;
+  // ---------- event legend rows (condensed further 2026-09-27) ----------
+  // Just the phase name + a bare altitude number now -- "Exit"/"Under Canopy"
+  // wording dropped since the row's own dot color already identifies which
+  // event it is, and the row was wrapping to a second line on narrow screens.
+  // Freefall's number is known from frame 1 so it's set once, unconditionally.
+  // Canopy's number lives in a separate detail span that stays hidden until
+  // playback actually reaches deployment -- toggled in render(), matching how
+  // the old leader-line callouts used to reveal.
+  const legendCanopyOpenDetailEl = document.getElementById('legend-canopy-open-detail');
   if(phases.hasExit){
-    calloutExitEl.querySelector('.alt').textContent = Math.round(pts[0].y*M_TO_FT).toLocaleString()+' ft';
+    document.getElementById('legend-freefall-text').textContent =
+      'Freefall — '+Math.round(pts[0].y*M_TO_FT).toLocaleString()+' ft';
   }
-  if(deployAnchor){
-    calloutDeployEl.querySelector('.alt').textContent = Math.round(pts[deployOnsetRel].y*M_TO_FT).toLocaleString()+' ft';
+  if(phases.hasDeployment){
+    // The detected point is already a few seconds into the snivel (the
+    // vertical-speed smoothing window looks slightly ahead, and confirmation
+    // requires the transition to hold for a real sustained duration), so this
+    // altitude reads as "the algorithm is now confident you're flying a
+    // decelerated canopy," not the literal pull altitude. Revisit if the
+    // accelerometer roadmap item ever makes true pull detection practical.
+    legendCanopyOpenDetailEl.textContent =
+      ' — '+Math.round(pts[deployOnsetRel].y*M_TO_FT).toLocaleString()+' ft';
   }
 
-  function positionCallout(el, anchor){
-    const p = anchor.clone().project(camera);
-    if(p.z > 1){ el.classList.remove('show'); return; }
-    const w = stage.clientWidth, h = stage.clientHeight;
-    const x = (p.x*0.5+0.5)*w, y = (1-(p.y*0.5+0.5))*h;
-    if(x<-40||x>w+40||y<-40||y>h+40){ el.classList.remove('show'); return; }
-    el.style.left = x+'px';
-    el.style.top = y+'px';
-  }
+  // ---------- landing label (small text next to the 3D marker) ----------
+  // Deliberately no altitude number -- landing is conceptually 0 AGL, but the
+  // raw baro/GPS reading is often a few feet off zero (different landing spot
+  // than takeoff, baro drift/imprecision), and showing that number reads as a
+  // bug rather than what it actually is.
+  const legendLandingRowEl = document.getElementById('legend-landing-row');
 
   // ---------- playback ----------
   // Three speed presets, selectable from a small menu next to the scrubber.
@@ -982,10 +1407,21 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   // totalDuration the compressed default is based on) at its actual pace —
   // the plane's climb to altitude was already excluded upstream by
   // classifyPhases()'s trim, nothing extra needed here for that.
+  // Flat, absolute presets rather than a flight-length-scaled formula --
+  // 2026-09-26/27 real flight data showed the three actual wingsuit jumps land
+  // in a tight, consistent band (~5-6 min post-exit each), so a per-flight
+  // scaling divisor wasn't buying anything and was producing an oddly fast
+  // ~17s "Compressed" playback that felt too rushed to actually watch. Flat
+  // 30s/60s/real-time is simpler and reads better at the flight lengths this
+  // app actually sees. Math.min(_, totalDuration) just guards against a
+  // preset being labeled "30 seconds" but actually taking longer than the
+  // real flight on an unusually short recording -- not solving for the long-
+  // flight edge case (a 10+ minute high pull, say) deliberately, per the user:
+  // revisit if/when a much longer real flight actually shows this is an issue.
   const SPEED_PRESETS = [
-    { label:'Compressed', shortLabel:'Comp', seconds: Math.min(30, Math.max(15, totalDuration/20)) },
-    { label:'90 seconds',  shortLabel:'90s',  seconds: 90 },
-    { label:'Real time',   shortLabel:'Real', seconds: totalDuration },
+    { label:'30 seconds', shortLabel:'30s', seconds: Math.min(30, totalDuration) },
+    { label:'1 minute',   shortLabel:'1m',   seconds: Math.min(60, totalDuration) },
+    { label:'Real time',  shortLabel:'Real', seconds: totalDuration },
   ];
   let speedIndex = 0;
   let PLAYBACK_SECONDS = SPEED_PRESETS[speedIndex].seconds;
@@ -994,6 +1430,92 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   let lastFrame = performance.now();
 
   const scrubber = document.getElementById('scrubber');
+  // Scrubber track progress-fill (2026-09-28, replaces an earlier
+  // deployment-point dot marker). The "already played" portion of the
+  // track is tinted per-phase -- freefall color up to the deployment
+  // point, then canopy color from there to the current playhead -- so the
+  // track itself communicates both "how far into this phase am I" and
+  // "which phase was that." The untouched, not-yet-played portion stays
+  // the plain default track color.
+  //
+  // Solid + pre-muted, not translucent (2026-09-28 revision): an alpha-
+  // transparent fill genuinely blends with whatever's underneath, so
+  // against the blue gradient sky/map showing through the track, the
+  // yellow read greenish and the white read gray -- real color science,
+  // not a tunable opacity value. Instead each color is desaturated toward
+  // a neutral gray *before* painting, then drawn fully opaque, so the hue
+  // is baked in and nothing behind the track can shift it.
+  const deployFrac = phases.hasDeployment
+    ? (pts[deployOnsetRel].t - pts[0].t) / totalDuration
+    : -1;
+  function muteHex(hex, towardHex, amount){
+    const p = h => { const c = h.trim().replace('#',''); return {r:parseInt(c.substring(0,2),16), g:parseInt(c.substring(2,4),16), b:parseInt(c.substring(4,6),16)}; };
+    const a = p(hex), b = p(towardHex);
+    const mix = (x,y) => Math.round(x + (y-x)*amount);
+    return `rgb(${mix(a.r,b.r)},${mix(a.g,b.g)},${mix(a.b,b.b)})`;
+  }
+  const rootStyle = getComputedStyle(document.documentElement);
+  const MUTE_TOWARD = '#808080'; // neutral gray -- deliberately not a theme color, so muting can't itself reintroduce a hue shift
+  const MUTE_AMOUNT = 0.4;
+  const FREEFALL_BRIGHT = (rootStyle.getPropertyValue('--freefall') || '#ffd23f').trim();
+  const CANOPY_BRIGHT = (rootStyle.getPropertyValue('--canopy') || '#ffffff').trim();
+  const FREEFALL_PLAYED_RGBA = muteHex(FREEFALL_BRIGHT, MUTE_TOWARD, MUTE_AMOUNT);
+  const CANOPY_PLAYED_RGBA = muteHex(CANOPY_BRIGHT, MUTE_TOWARD, MUTE_AMOUNT);
+  const TRACK_DEFAULT = rootStyle.getPropertyValue('--line') || '#24323f';
+  // Thumb ring dims each bright color toward black the same way the old
+  // fixed --accent-dim related to --accent, so a yellow-phase thumb gets
+  // a dark-gold ring and a canopy-phase (white) thumb gets a mid-gray
+  // ring, rather than leaving a static orange ring around a non-orange
+  // thumb.
+  const FREEFALL_RING = muteHex(FREEFALL_BRIGHT, '#000000', 0.5);
+  const CANOPY_RING = muteHex(CANOPY_BRIGHT, '#000000', 0.5);
+  // Comet-trail lead-in (2026-09-28): the small stretch of track right
+  // behind the thumb is full-brightness phase color, fading over
+  // FADE_FRAC of the total duration into the settled, muted color used
+  // for everything played further back. CSS gradients interpolate
+  // between color stops on their own, so this is just two extra stops
+  // (muted at fadeStart, bright at the playhead) rather than any manual
+  // blending -- only the currently-active phase gets the bright fade; a
+  // phase that's already fully behind the playhead (e.g. freefall once
+  // we're into canopy) stays uniformly muted, since its "comet" already
+  // passed through and settled.
+  const FADE_FRAC = 0.06;
+  function updateScrubberFill(frac){
+    frac = Math.min(1, Math.max(0, frac));
+    const pct = n => (Math.min(1, Math.max(0, n)) * 100).toFixed(2) + '%';
+    // Thumb itself now tracks the active phase too, same bright colors
+    // as the track's comet-trail leading edge.
+    const inCanopyNow = deployFrac >= 0 && frac > deployFrac;
+    scrubber.style.setProperty('--thumb-color', inCanopyNow ? CANOPY_BRIGHT : FREEFALL_BRIGHT);
+    scrubber.style.setProperty('--thumb-ring', inCanopyNow ? CANOPY_RING : FREEFALL_RING);
+    let stops;
+    if(deployFrac < 0 || frac <= deployFrac){
+      // Still in (or entirely, for non-deployment data) freefall --
+      // that's the active/leading phase, so it gets the bright fade.
+      const fadeStart = Math.max(0, frac - FADE_FRAC);
+      stops = [
+        `${FREEFALL_PLAYED_RGBA} 0%`,
+        `${FREEFALL_PLAYED_RGBA} ${pct(fadeStart)}`,
+        `${FREEFALL_BRIGHT} ${pct(frac)}`,
+        `${TRACK_DEFAULT} ${pct(frac)}`,
+        `${TRACK_DEFAULT} 100%`
+      ];
+    } else {
+      // Past deployment -- freefall is fully behind us now (uniformly
+      // muted, no fade), canopy is the active/leading phase.
+      const fadeStart = Math.max(deployFrac, frac - FADE_FRAC);
+      stops = [
+        `${FREEFALL_PLAYED_RGBA} 0%`,
+        `${FREEFALL_PLAYED_RGBA} ${pct(deployFrac)}`,
+        `${CANOPY_PLAYED_RGBA} ${pct(deployFrac)}`,
+        `${CANOPY_PLAYED_RGBA} ${pct(fadeStart)}`,
+        `${CANOPY_BRIGHT} ${pct(frac)}`,
+        `${TRACK_DEFAULT} ${pct(frac)}`,
+        `${TRACK_DEFAULT} 100%`
+      ];
+    }
+    scrubber.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+  }
   const playbtn = document.getElementById('playbtn');
   const playbackTimeEl = document.getElementById('playback-time');
   const elapsedReadout = document.getElementById('elapsed-readout');
@@ -1001,11 +1523,14 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   const statV = document.getElementById('stat-vspeed');
   const statH = document.getElementById('stat-hspeed');
   const statGlide = document.getElementById('stat-glide');
+  const statGlideLabel = document.getElementById('stat-glide-label');
   const statDist = document.getElementById('stat-dist');
 
   const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
   const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
-  const ICON_STOPWATCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="2" x2="15" y2="2"/><line x1="12" y1="2" x2="12" y2="5"/><circle cx="12" cy="14" r="8"/><line x1="12" y1="14" x2="12" y2="10"/><line x1="12" y1="14" x2="15" y2="16"/></svg>';
+  const ICON_CAMERA_FOLLOW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.5"/><circle cx="12" cy="12" r="8"/><line x1="12" y1="1.5" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22.5"/><line x1="1.5" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22.5" y2="12"/></svg>';
+  const ICON_CAMERA_OVERVIEW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5"/><path d="M15 4h5v5"/><path d="M20 15v5h-5"/><path d="M9 20H4v-5"/></svg>';
+  const ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
   playbtn.innerHTML = ICON_PAUSE;
 
   function fmtClock(sec){
@@ -1023,7 +1548,11 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   document.querySelector('#topbar .flight-time').lastChild.textContent = ' / ' + fmtClockLong(totalDuration);
   document.querySelector('#topbar .flight-time .label').textContent = phases.hasExit ? 'Since exit' : 'Elapsed';
 
-  const STATS_WINDOW_SECONDS = 5.0;
+
+  // Tuned 2026-09-26 from 5.0: tested against Flight 1, 3s barely changes steady-state
+  // noise (~1.2mph stdev vs ~0.8mph at 5s) but tracks a real transient (a base-to-final
+  // turn's speed spike) roughly 2s sooner -- more responsive at negligible noise cost.
+  const STATS_WINDOW_SECONDS = 3.0;
   function windowStartIndex(i, seconds){
     // trailing-only window (looks backward from i, never ahead) so the stat
     // reflects "recent history up to now", matching how a live instrument would read
@@ -1037,7 +1566,15 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     let lo=0, hi=N-1;
     const target = pts[0].t + tSec;
     if(target<=pts[0].t) return 0;
-    if(target>=pts[N-1].t) return N-1;
+    // End-of-playback boundary is viewerEndIdx now, not N-1 (2026-09-27, once
+    // playback started actually stopping at landing) -- the general search
+    // below always under-shoots by one sample (it hands back the last index
+    // *before* target so callers can interpolate toward the next one), so
+    // without this explicit snap the very last frame lands one sample short
+    // of viewerEndIdx and the landing marker's "i >= viewerLandingIdx" reveal
+    // check never fires, leaving the moving marker visible sitting on the
+    // ground instead of the green landing marker.
+    if(target>=pts[viewerEndIdx].t) return viewerEndIdx;
     while(lo<hi){
       const mid=(lo+hi)>>1;
       if(pts[mid].t<target) lo=mid+1; else hi=mid;
@@ -1050,20 +1587,48 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     playbackT = frac * PLAYBACK_SECONDS;
     render(frac);
     scrubber.value = Math.round(frac*1000);
+    updateScrubberFill(frac);
     playbackTimeEl.textContent = fmtClock(playbackT)+' / '+fmtClock(PLAYBACK_SECONDS);
   }
 
   function render(frac){
     const flightT = frac * totalDuration;
     const i = findIndexForTime(flightT);
-    const count = Math.max(2, i+1);
-    liveLine.geometry.instanceCount = Math.max(1, count-1); // fat-line equivalent of setDrawRange
 
     const p = pts[i];
-    marker.position.set(p.x,p.y,p.z);
-    glow.position.set(p.x,p.y,p.z);
+    // Interpolate the marker/glow's world position between this sample and the
+    // next one, rather than snapping straight to pts[i] -- raw GPS samples land
+    // at uneven real-world intervals (sometimes multiple seconds apart), so a
+    // hard snap makes playback look "still, then launch forward, then still."
+    // Stats below intentionally still key off the nearest sample (i) -- they're
+    // meant to read like an instrument sampling at each real data point, not
+    // something that should visibly interpolate.
+    const iNext = Math.min(i+1, N-1);
+    const pNext = pts[iNext];
+    const segDt = pNext.t - p.t;
+    const target = pts[0].t + flightT;
+    const localFrac = segDt > 0 ? Math.max(0, Math.min(1, (target - p.t)/segDt)) : 0;
+    const mx = p.x + (pNext.x - p.x)*localFrac;
+    const my = p.y + (pNext.y - p.y)*localFrac;
+    const mz = p.z + (pNext.z - p.z)*localFrac;
+    marker.position.set(mx,my,mz);
+    glow.position.set(mx,my,mz);
+    markerWorldPos.set(mx,my,mz); // read by the camera-follow easing in the animation loop
+    // Tracer glow is back to dynamically matching the current phase color
+    // (white during freefall, orange during canopy) -- reverted 2026-09-28
+    // after trying a fixed-orange-for-the-whole-flight version. The core
+    // dot stays a static white (markerMat, set above), same as it's always
+    // been -- only the glow shifts.
     const c = colorForIndex(i);
     glowMat.color.copy(c);
+
+    // reveal the curved rendered line in sync with the same interpolated
+    // fraction driving the marker above, not the raw sample index, so the
+    // traced line's leading edge and the marker never visibly separate
+    const renderIdx = Math.min(renderN-1, renderIdxForSample(i) + Math.round(localFrac*CURVE_SUBDIV));
+    liveLine.geometry.instanceCount = Math.max(1, renderIdx); // fat-line equivalent of setDrawRange
+    groundLine.geometry.instanceCount = liveLine.geometry.instanceCount; // ground shadow stays in lockstep
+    curtainGeo.setDrawRange(0, Math.max(0, renderIdx) * 6); // curtain grows with the same leading edge
 
     elapsedReadout.textContent = fmtClockLong(flightT);
 
@@ -1081,36 +1646,66 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
 
     const vAvgWindow = dtWin>0.3 ? (p.y - pts[winA].y)/dtWin
       : (elapsedT>0.001 ? (p.y - pts[0].y)/elapsedT : 0);
-    statV.textContent = Math.round(vAvgWindow*MPS_TO_FPM).toLocaleString();
+    // unsigned: the rendered/stats-driving point series is already trimmed to
+    // post-exit-only (see the Bounding/scaling item), so every displayed frame is
+    // between exit and landing -- a net descent -- and mph matches how skydivers
+    // actually talk about fall rate (vs. the old fpm aviation-convention default).
+    // Whole integers only: GPS-derived speed already carries real noise at this
+    // precision, so a decimal place is false precision, not real accuracy.
+    statV.textContent = Math.round(Math.abs(vAvgWindow*MPS_TO_MPH)).toLocaleString();
 
     const hAvgWindow = dtWin>0.3 ? (cumHorizDist[i]-cumHorizDist[winA])/dtWin
       : p.hSpeed;
-    statH.textContent = (hAvgWindow*MPS_TO_MPH).toFixed(1);
+    statH.textContent = Math.round(hAvgWindow*MPS_TO_MPH).toLocaleString();
 
-    const vertDrop = pts[0].y - p.y;
-    if(Math.abs(vertDrop) < 1 || cumHorizDist[i] < 1){
+    // Glide ratio: cumulative since the CURRENT PHASE's onset, not the whole flight --
+    // freefall glide (since exit) before deployment, canopy glide (since deployment)
+    // after, reusing the same phase-onset index the path coloring above already uses.
+    // Deliberately not a short rolling window: tested directly against real data and a
+    // live window stayed noisy (glide's vertical-drop denominator is far more sensitive
+    // to GPS jitter over a short span than the speed stats' time denominator is) --
+    // this is meant to read as "how did this phase go," not "what's happening right now."
+    const inCanopy = phases.hasDeployment && i >= deployOnsetRel;
+    const glideBaseIdx = inCanopy ? deployOnsetRel : 0;
+    const glideVertDrop = pts[glideBaseIdx].y - p.y;
+    const glideDist = cumHorizDist[i] - cumHorizDist[glideBaseIdx];
+    if(Math.abs(glideVertDrop) < 1 || glideDist < 1){
       statGlide.textContent = '—';
     } else {
-      const ratio = cumHorizDist[i] / Math.abs(vertDrop);
+      const ratio = glideDist / Math.abs(glideVertDrop);
       statGlide.textContent = ratio > 200 ? '—' : ratio.toFixed(1)+' : 1';
     }
+    statGlideLabel.textContent = phases.hasExit ? (inCanopy ? 'Glide · CP' : 'Glide · FF') : 'Glide';
+    // Glide value no longer dynamically colors per phase (2026-09-28) --
+    // stays the same default stat-value color (white) as the other stats.
 
     // cumulative ground track distance flown so far (horizontal only, not
     // path-through-the-air distance) — reuses cumHorizDist, already computed
     // once from the same x/z series the glide-ratio stat above reads from
     statDist.textContent = (cumHorizDist[i] * M_TO_MI).toFixed(2);
 
-    if(phases.hasExit){
-      calloutExitEl.classList.add('show');
-      positionCallout(calloutExitEl, exitAnchor);
+    // event legend rows + static 3D markers -- reveal once playback reaches
+    // each point, same "don't spoil what's ahead" behavior the old leader-line
+    // callouts had, just via a hidden attribute / mesh.visible instead of a
+    // per-frame screen-space reprojection. Exit's detail is merged directly
+    // into the Freefall/wingsuit row's text (set once above) since exit is
+    // always at i=0 -- nothing to reveal there.
+    if(canopyOpenMarker){
+      const reached = i >= deployOnsetRel;
+      canopyOpenMarker.visible = reached;
+      legendCanopyOpenDetailEl.hidden = !reached;
     }
-    if(deployAnchor){
-      if(i >= deployOnsetRel){
-        calloutDeployEl.classList.add('show');
-        positionCallout(calloutDeployEl, deployAnchor);
-      } else {
-        calloutDeployEl.classList.remove('show');
-      }
+    if(landingMarker){
+      const reached = i >= viewerLandingIdx;
+      landingMarker.visible = reached;
+      legendLandingRowEl.hidden = !reached;
+      // Once landed, hide the moving position marker + its glow (2026-09-27)
+      // -- it's bigger/brighter than the static landing marker (diag*0.006
+      // core + diag*0.05 glow halo vs. the landing marker's plain diag*0.004
+      // sphere) and playback now stops right here anyway, so there's nothing
+      // left to track; only the green landing marker should read at the end.
+      marker.visible = !reached;
+      glow.visible = !reached;
     }
   }
 
@@ -1129,15 +1724,31 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     lastFrame = performance.now();
   });
 
-  // ---------- playback speed menu ----------
-  const speedbtn = document.getElementById('speedbtn');
-  const speedMenu = document.getElementById('speed-menu');
-  speedbtn.innerHTML = ICON_STOPWATCH; // static icon; the button no longer echoes the selected preset as text
-  speedMenu.innerHTML = '<div class="speed-menu-title" aria-hidden="true">Playback speed</div>' +
+  // ---------- merged settings menu (playback speed + camera mode) ----------
+  // Combined 2026-09-27 from two separate icon buttons (each with its own
+  // dropdown) into one gear-icon button with a single menu holding both
+  // sections. One narrow icon fits back on the scrub row where the two used
+  // to crowd it, which also removes the separate icon-row line entirely --
+  // that vertical space was the bigger crowding problem on phone screens.
+  const settingsbtn = document.getElementById('settingsbtn');
+  const settingsMenu = document.getElementById('settings-menu');
+  settingsbtn.innerHTML = ICON_GEAR;
+
+  const CAMERA_MODES = [
+    { key:'follow',   label:'Follow marker', icon: ()=>ICON_CAMERA_FOLLOW },
+    { key:'overview', label:'Overview',       icon: ()=>ICON_CAMERA_OVERVIEW },
+  ];
+  settingsMenu.innerHTML =
+    '<div class="settings-menu-title" aria-hidden="true">Playback speed</div>' +
     SPEED_PRESETS.map((p,i)=>
       '<button type="button" role="menuitemradio" data-speed-idx="'+i+'">'+p.label+'</button>'
+    ).join('') +
+    '<div class="settings-menu-title" aria-hidden="true">Camera</div>' +
+    CAMERA_MODES.map(m=>
+      '<button type="button" role="menuitemradio" data-camera-key="'+m.key+'">'+m.icon()+'<span>'+m.label+'</span></button>'
     ).join('');
-  const speedMenuButtons = [...speedMenu.querySelectorAll('button')];
+  const speedMenuButtons = [...settingsMenu.querySelectorAll('button[data-speed-idx]')];
+  const cameraMenuButtons = [...settingsMenu.querySelectorAll('button[data-camera-key]')];
 
   function updateSpeedUi(){
     speedMenuButtons.forEach((btn,i)=>{
@@ -1147,20 +1758,51 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
   }
   updateSpeedUi();
 
-  function openSpeedMenu(){ speedMenu.hidden = false; speedbtn.setAttribute('aria-expanded','true'); }
-  function closeSpeedMenu(){ speedMenu.hidden = true; speedbtn.setAttribute('aria-expanded','false'); }
+  function updateCameraUi(){
+    const label = followCamera ? 'Camera: following marker' : 'Camera: overview';
+    cameraMenuButtons.forEach(btn=>{
+      const isFollow = btn.dataset.cameraKey === 'follow';
+      const active = isFollow === followCamera;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+    // the button itself stays a plain gear icon regardless of camera state --
+    // it now represents two settings groups, not just camera mode, so a
+    // camera-specific icon/highlight on it would be misleading
+    settingsbtn.title = label;
+  }
+  updateCameraUi();
 
-  speedbtn.addEventListener('click', (e)=>{
+  function openSettingsMenu(){ settingsMenu.hidden = false; settingsbtn.setAttribute('aria-expanded','true'); }
+  function closeSettingsMenu(){ settingsMenu.hidden = true; settingsbtn.setAttribute('aria-expanded','false'); }
+
+  settingsbtn.addEventListener('click', (e)=>{
     e.stopPropagation();
-    if(speedMenu.hidden) openSpeedMenu(); else closeSpeedMenu();
+    closeStatsInfoMenu();
+    if(settingsMenu.hidden) openSettingsMenu(); else closeSettingsMenu();
   });
-  document.addEventListener('click', ()=>{ closeSpeedMenu(); });
-  speedMenu.addEventListener('click', (e)=>{ e.stopPropagation(); });
+  document.addEventListener('click', ()=>{ closeSettingsMenu(); });
+  settingsMenu.addEventListener('click', (e)=>{ e.stopPropagation(); });
+
+  // Stats info button (added 2026-09-27) -- purely a reference popover, no
+  // interactive options, so it shares the settings menu's open/close/outside-
+  // click conventions but not its data-driven button-list logic.
+  const statsInfoBtn = document.getElementById('statsinfobtn');
+  const statsInfoMenu = document.getElementById('stats-info-menu');
+  function openStatsInfoMenu(){ statsInfoMenu.hidden = false; statsInfoBtn.setAttribute('aria-expanded','true'); }
+  function closeStatsInfoMenu(){ statsInfoMenu.hidden = true; statsInfoBtn.setAttribute('aria-expanded','false'); }
+  statsInfoBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    closeSettingsMenu();
+    if(statsInfoMenu.hidden) openStatsInfoMenu(); else closeStatsInfoMenu();
+  });
+  document.addEventListener('click', ()=>{ closeStatsInfoMenu(); });
+  statsInfoMenu.addEventListener('click', (e)=>{ e.stopPropagation(); });
 
   speedMenuButtons.forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const idx = parseInt(btn.dataset.speedIdx, 10);
-      closeSpeedMenu();
+      closeSettingsMenu();
       if(idx === speedIndex) return;
       // preserve the current position in the flight across the speed change
       // (convert to a fraction of the old duration, reapply to the new one)
@@ -1170,6 +1812,16 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
       PLAYBACK_SECONDS = SPEED_PRESETS[speedIndex].seconds;
       updateSpeedUi();
       setByFraction(frac);
+    });
+  });
+
+  cameraMenuButtons.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const wantFollow = btn.dataset.cameraKey === 'follow';
+      closeSettingsMenu();
+      if(wantFollow === followCamera) return;
+      followCamera = wantFollow;
+      updateCameraUi();
     });
   });
 
@@ -1187,6 +1839,24 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
       }
       setByFraction(playbackT/PLAYBACK_SECONDS);
     }
+    // ease the camera's orbit target toward whichever mode is active, every
+    // frame regardless of whether playback is advancing -- so toggling the
+    // follow/overview button (or a fast-moving marker) reads as a smooth pan
+    // rather than a snap, and the camera keeps tracking correctly even while
+    // paused (no render(frac) call happening to drive it otherwise).
+    const desiredCameraTarget = followCamera ? markerWorldPos : overviewTarget;
+    cameraTarget.lerp(desiredCameraTarget, CAMERA_EASE);
+    // auto-zoom: eases `radius` toward a target derived from the marker's
+    // current altitude (0 = on the ground -> AUTO_ZOOM_NEAR_RADIUS, 1 = top
+    // of the trimmed exit-to-landing altitude range -> AUTO_ZOOM_FAR_RADIUS),
+    // every frame regardless of playback/pause, same as the camera-target
+    // easing above -- but only until the user manually zooms even once.
+    if(!userHasZoomed){
+      const altFrac = Math.min(1, Math.max(0, (markerWorldPos.y - minY) / Math.max(1e-6, maxY - minY)));
+      const zoomTarget = AUTO_ZOOM_NEAR_RADIUS + (AUTO_ZOOM_FAR_RADIUS - AUTO_ZOOM_NEAR_RADIUS) * altFrac;
+      radius += (zoomTarget - radius) * AUTO_ZOOM_EASE;
+    }
+    updateCamera();
     renderer.render(scene, camera);
     requestAnimationFrame(loop);
   }
@@ -1195,5 +1865,3 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
 }
 window.runViewer = runViewer;
 </script>
-
-</body></html>
