@@ -57,7 +57,12 @@ class MainActivity : ComponentActivity() {
                             isRecording = isRecording,
                             onStartClick = { checkPermissionsAndStart() },
                             onStopClick = { stopRecording() },
-                            onViewLatestClick = { openViewer(null) },
+                            // Guarded here rather than just relying on the button being disabled
+                            // below: the current, still-recording flight hasn't been saved to
+                            // disk yet (FlightRecordingService only writes it out in onDestroy),
+                            // so opening the viewer mid-recording would silently show a stale old
+                            // flight, or nothing at all if this is the very first flight.
+                            onViewLatestClick = { if (!isRecording) openViewer(null) },
                             onPastFlightsClick = { currentScreen = Screen.PastFlights }
                         )
                         Screen.PastFlights -> PastFlightsScreen(
@@ -183,8 +188,8 @@ private fun HomeScreen(
             Text(if (isRecording) "Stop" else "Start Flight")
         }
         Spacer(modifier = Modifier.height(10.dp))
-        OutlinedButton(onClick = onViewLatestClick) {
-            Text("View Latest Flight")
+        OutlinedButton(onClick = onViewLatestClick, enabled = !isRecording) {
+            Text(if (isRecording) "Recording in progress..." else "View Latest Flight")
         }
         Spacer(modifier = Modifier.height(10.dp))
         OutlinedButton(onClick = onPastFlightsClick) {

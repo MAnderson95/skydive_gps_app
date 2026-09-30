@@ -61,6 +61,13 @@ class FlightViewerActivity : ComponentActivity() {
             pageReady.await()
             if (callJs != null) {
                 webView.evaluateJavascript(callJs, null)
+            } else {
+                // buildRunViewerCall came back with nothing to show — the CSV had no rows
+                // FlightGeoUtils could turn into a plan (corrupted file, truncated write, or an
+                // empty/header-only log). Previously this left the WebView sitting on a blank,
+                // unexplained page; safe to replace it now since pageReady already confirmed the
+                // page finished loading.
+                showCorruptedFlightMessage()
             }
         }
     }
@@ -113,6 +120,14 @@ class FlightViewerActivity : ComponentActivity() {
     private fun showNoFlightsMessage() {
         val tv = TextView(this)
         tv.text = "No recorded flights yet — record one from the main screen first."
+        tv.gravity = Gravity.CENTER
+        tv.setPadding(48, 48, 48, 48)
+        setContentView(tv)
+    }
+
+    private fun showCorruptedFlightMessage() {
+        val tv = TextView(this)
+        tv.text = "This flight's recording couldn't be read — the file may be corrupted or empty."
         tv.gravity = Gravity.CENTER
         tv.setPadding(48, 48, 48, 48)
         setContentView(tv)
