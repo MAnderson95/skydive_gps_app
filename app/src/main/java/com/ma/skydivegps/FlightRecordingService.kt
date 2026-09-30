@@ -71,6 +71,11 @@ class FlightRecordingService : Service() {
         gnssStatusTracker = GnssStatusTracker(this) { satellitesUsed, avgCn0 ->
             latestSatellitesUsed = satellitesUsed
             latestAvgSignalDb = avgCn0
+            // Shared alongside the isRunning ground-truth pattern above, so the Home screen can
+            // show a live "GPS locked / N satellites" line via simple polling (no bound-service
+            // rearchitecture) — same "keep it simple, tune later" status as the eventual
+            // Cn0-based signal-strength label this is standing in for.
+            latestSatellitesUsedShared = satellitesUsed
         }
 
         locationTracker = LocationTracker(this) { location ->
@@ -137,6 +142,7 @@ class FlightRecordingService : Service() {
         // mid-recording.
         if (!isRunning) {
             recordingStartTimeMillis = System.currentTimeMillis()
+            recordingStartTimeMillisShared = recordingStartTimeMillis
         }
         isRunning = true
 
@@ -168,6 +174,7 @@ class FlightRecordingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        latestSatellitesUsedShared = null
         mainHandler.removeCallbacks(autoStopRunnable)
         mainHandler.removeCallbacks(landingAutoStopRunnable)
         mainHandler.removeCallbacks(notificationTickRunnable)
@@ -233,6 +240,18 @@ class FlightRecordingService : Service() {
         // Activity recreation.
         @Volatile
         var isRunning: Boolean = false
+            private set
+
+        // Same same-process-static pattern as isRunning above, for the Home screen's live
+        // "Recording..." card (elapsed chronometer + satellite count) — simple polling from
+        // MainActivity, no bound-service/StateFlow rearchitecture, matching the signal-strength
+        // indicator's own settled "keep it simple for now" build approach (PROJECT_CONTEXT).
+        @Volatile
+        var recordingStartTimeMillisShared: Long = 0L
+            private set
+
+        @Volatile
+        var latestSatellitesUsedShared: Int? = null
             private set
     }
 }
