@@ -127,6 +127,25 @@ object FlightGeoUtils {
         val latRad = Math.toRadians(originLat)
         val metersPerDegreeLon = METERS_PER_DEGREE_LAT * cos(latRad)
 
+        // ---- altitude ground-reference baseline (2026-09-30 fix) ----
+        // Altitude readouts (the "Altitude" live stat, and the "Freefall — X ft" /
+        // "Under Canopy — X ft" legend numbers, all driven by this y value downstream in
+        // flight_viewer.html) were showing raw barometric PRESSURE altitude
+        // (BarometerTracker.kt uses SensorManager.getAltitude against a fixed 1013.25 hPa
+        // standard-atmosphere reference, not that day's real sea-level pressure) with no
+        // ground-level correction, even though the UI has always described this stat as
+        // "height above the ground at takeoff/landing." The two are only the same on a day
+        // where standard pressure happens to match reality — most days they don't. Confirmed
+        // 2026-09-30 against Flight 1's real CSV: the very first recorded point (phone still
+        // on the ground before takeoff) reads 271.9m/892ft of "altitude" on its own, and
+        // subtracting that from the exit/deployment readings lines up exactly with the
+        // validated real numbers (13,786ft exit, 2,912ft canopy). Subtracting a constant
+        // per-flight baseline here is safe for every OTHER computation that uses these same
+        // y values: LandingDetector and the viewer's classifyPhases() only ever look at
+        // vertical SPEED (a derivative), which is unaffected by a constant offset, and the
+        // camera/map framing only cares about relative extents, not absolute height.
+        val groundAltitudeBaseline = points.first().let { it.altitudeBaro?.toDouble() ?: it.altitudeGps }
+
         // ---- local x/y/z rows — still computed over the FULL recording (not just
         // post-exit), since the viewer's own client-side phase detection needs the
         // pre-exit/plane-ride points to run against, same as it always has. Only the
@@ -137,7 +156,7 @@ object FlightGeoUtils {
         val rows = points.map { p ->
             val x = (originLon - p.longitude) * metersPerDegreeLon  // west-positive — see axis convention note above
             val z = (p.latitude - originLat) * METERS_PER_DEGREE_LAT
-            val y = p.altitudeBaro?.toDouble() ?: p.altitudeGps
+            val y = (p.altitudeBaro?.toDouble() ?: p.altitudeGps) - groundAltitudeBaseline
             val t = (p.timestamp - t0) / 1000.0
             doubleArrayOf(x, y, z, t, p.speed.toDouble(), p.accuracy.toDouble())
         }
