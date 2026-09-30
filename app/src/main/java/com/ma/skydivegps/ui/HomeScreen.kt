@@ -50,10 +50,10 @@ import com.ma.skydivegps.ui.theme.IBMPlexMono
 import com.ma.skydivegps.ui.theme.TailwindColors
 
 /** Live values for the Recording-active card, refreshed by simple polling from MainActivity
- *  (see FlightRecordingService's recordingStartTimeMillisShared / latestSatellitesUsedShared). */
+ *  (see FlightRecordingService's recordingStartTimeMillisShared / latestSignalTierShared). */
 data class RecordingLiveState(
     val elapsedText: String,
-    val satellitesText: String
+    val signalText: String
 )
 
 /**
@@ -137,7 +137,7 @@ fun TailwindHomeScreen(
                 Spacer(Modifier.height(20.dp))
                 Box(modifier = Modifier.width(280.dp)) {
                     Text3(
-                        "Skydive flight tracking & playback",
+                        "Wingsuit flight tracking\n& playback",
                         Color.White,
                         15.sp,
                         FontWeight.Normal,
@@ -189,7 +189,12 @@ fun TailwindHomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 190.dp, start = 24.dp, end = 24.dp)
+                    // Was 190.dp, sized off the taller HTML/CSS design-thread prototype mock.
+                    // Dropped to sit just under the small corner logo row above (which starts at
+                    // top=40.dp and is ~34dp tall, ending around y=74dp) — 96dp leaves a small
+                    // deliberate gap rather than butting the cards right up against the logo.
+                    // Real device (Pixel 10) has less vertical room than the prototype implied.
+                    .padding(top = 96.dp, start = 24.dp, end = 24.dp)
                     .alpha(homeAlpha),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -300,7 +305,7 @@ private fun RecordingActiveCard(live: RecordingLiveState?, onStop: () -> Unit) {
         Spacer(Modifier.height(4.dp))
         Text3(live?.elapsedText ?: "00:00:00", Color.White, 20.sp, FontWeight.SemiBold, mono = true)
         Spacer(Modifier.height(4.dp))
-        Text3(live?.satellitesText ?: "Acquiring GPS…", Color.White.copy(alpha = 0.72f), 13.sp, FontWeight.Normal)
+        Text3(live?.signalText ?: "Acquiring GPS…", Color.White.copy(alpha = 0.72f), 13.sp, FontWeight.Normal)
         Spacer(Modifier.height(16.dp))
         Box(
             modifier = Modifier

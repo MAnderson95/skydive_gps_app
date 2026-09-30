@@ -39,7 +39,13 @@ object MapImageFetcher {
     ): File? {
         val cacheFile = cacheFileFor(context, cacheKey)
         cacheFile.parentFile?.let { if (!it.exists()) it.mkdirs() }
-        if (cacheFile.exists()) return cacheFile
+        // TEMPORARILY DISABLED (2026-09-30, per the user): always re-fetch instead of returning
+        // the cached image, so the real flights already cached under stale (pre-bounding-box-fix)
+        // map imagery pick up fresh, correctly-framed satellite tiles the next time each is
+        // opened. No need to delete old cache files first — the fresh fetch below overwrites the
+        // same cacheFile path. ROLL BACK by restoring the line below once those flights have each
+        // been reopened once (re-caching them), before this ships as a real commit long-term.
+        // if (cacheFile.exists()) return cacheFile
 
         val urlStr = "https://maps.googleapis.com/maps/api/staticmap" +
             "?center=$centerLat,$centerLon" +

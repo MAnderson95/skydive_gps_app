@@ -13,6 +13,7 @@ import com.ma.skydivegps.data.FlightFileStorage
 import com.ma.skydivegps.data.FlightLogger
 import com.ma.skydivegps.data.FlightPoint
 import com.ma.skydivegps.data.LandingDetector
+import com.ma.skydivegps.data.SignalStrength
 import com.ma.skydivegps.sensors.BarometerTracker
 import com.ma.skydivegps.sensors.GnssStatusTracker
 import com.ma.skydivegps.sensors.LocationTracker
@@ -28,6 +29,15 @@ class FlightRecordingService : Service() {
     private var latestBaroAltitude: Float? = null
     private var latestSatellitesUsed: Int? = null
     private var latestAvgSignalDb: Float? = null
+
+    // Debounced signal-strength tier (see SignalStrength) — only switches to a new tier once
+    // TIER_CONFIRM_COUNT consecutive raw Cn0 readings agree on it, so a single noisy GnssStatus
+    // update doesn't flicker the displayed label. Same "smooth against single-sample jitter"
+    // shape as LandingDetector's sustain-duration checks, just over reading-count instead of time
+    // (GnssStatus callbacks don't fire on a fixed cadence, so a reading count is the simpler knob).
+    private var pendingSignalTier: SignalStrength.Tier? = null
+    private var pendingSignalTierCount = 0
+    private var confirmedSignalTier: SignalStrength.Tier? = null
 
     private var recordingStartTimeMillis: Long = 0L
 
@@ -71,11 +81,23 @@ class FlightRecordingService : Service() {
         gnssStatusTracker = GnssStatusTracker(this) { satellitesUsed, avgCn0 ->
             latestSatellitesUsed = satellitesUsed
             latestAvgSignalDb = avgCn0
-            // Shared alongside the isRunning ground-truth pattern above, so the Home screen can
-            // show a live "GPS locked / N satellites" line via simple polling (no bound-service
-            // rearchitecture) — same "keep it simple, tune later" status as the eventual
-            // Cn0-based signal-strength label this is standing in for.
-            latestSatellitesUsedShared = satellitesUsed
+
+            val tier = SignalStrength.tierFor(avgCn0)
+            if (tier == pendingSignalTier) {
+                pendingSignalTierCount++
+            } else {
+                pendingSignalTier = tier
+                pendingSignalTierCount = 1
+            }
+            if (pendingSignalTierCount >= TIER_CONFIRM_COUNT && confirmedSignalTier != tier) {
+                confirmedSignalTier = tier
+                // Shared alongside the isRunning ground-truth pattern above, so the Home screen
+                // can show a live signal-strength line via simple polling (no bound-service
+                // rearchitecture) — same "keep it simple" status as the rest of this pattern.
+                // The notification (buildNotification below) reads confirmedSignalTier directly
+                // rather than through this shared field, since it's built in this same class.
+                latestSignalTierShared = confirmedSignalTier
+            }
         }
 
         locationTracker = LocationTracker(this) { location ->
@@ -174,7 +196,7 @@ class FlightRecordingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
-        latestSatellitesUsedShared = null
+        latestSignalTierShared = null
         mainHandler.removeCallbacks(autoStopRunnable)
         mainHandler.removeCallbacks(landingAutoStopRunnable)
         mainHandler.removeCallbacks(notificationTickRunnable)
@@ -204,11 +226,11 @@ class FlightRecordingService : Service() {
             manager.createNotificationChannel(channel)
         }
 
-        val satelliteText = latestSatellitesUsed?.let { "$it satellites" } ?: "acquiring satellites"
+        val signalText = confirmedSignalTier?.let { "${it.label} GPS signal" } ?: "acquiring GPS"
 
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("Recording flight")
-            .setContentText("GPS and altitude logging in progress — $satelliteText")
+            .setContentText("GPS and altitude logging in progress — $signalText")
             // setWhen + setUsesChronometer gives a live, self-updating elapsed-time counter in the
             // notification without needing to repost it every second ourselves — the system ticks
             // it. recordingStartTimeMillis is captured once in onStartCommand and reused on every
@@ -233,6 +255,9 @@ class FlightRecordingService : Service() {
         // recording still can't run forever if detection has a false negative.
         private const val AUTO_STOP_MS = 40 * 60 * 1000L
         private const val NOTIFICATION_UPDATE_INTERVAL_MS = 60_000L
+        // How many consecutive GnssStatus readings must agree on a new signal-strength tier
+        // before the displayed label actually switches — see the pendingSignalTier debounce above.
+        private const val TIER_CONFIRM_COUNT = 3
 
         // Ground truth for whether the service is actually recording — read by MainActivity
         // (same process; no android:process on the service in the manifest, so a plain static
@@ -243,15 +268,18 @@ class FlightRecordingService : Service() {
             private set
 
         // Same same-process-static pattern as isRunning above, for the Home screen's live
-        // "Recording..." card (elapsed chronometer + satellite count) — simple polling from
-        // MainActivity, no bound-service/StateFlow rearchitecture, matching the signal-strength
-        // indicator's own settled "keep it simple for now" build approach (PROJECT_CONTEXT).
+        // "Recording..." card's elapsed chronometer — simple polling from MainActivity, no
+        // bound-service/StateFlow rearchitecture.
         @Volatile
         var recordingStartTimeMillisShared: Long = 0L
             private set
 
+        // Debounced signal-strength tier (see the pendingSignalTier/TIER_CONFIRM_COUNT logic
+        // above) — already smoothed against single-sample jitter before it's written here, so
+        // MainActivity's poll can read it directly. Replaces the raw satellite-count placeholder
+        // this field used to hold.
         @Volatile
-        var latestSatellitesUsedShared: Int? = null
+        var latestSignalTierShared: SignalStrength.Tier? = null
             private set
     }
 }

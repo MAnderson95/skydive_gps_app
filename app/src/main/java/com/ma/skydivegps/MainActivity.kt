@@ -74,10 +74,11 @@ class MainActivity : ComponentActivity() {
                         currentScreen = Screen.Home
                     }
 
-                    // Live chronometer/satellite readout for the Recording-active card, refreshed
-                    // by simple polling of FlightRecordingService's shared fields once a second —
-                    // same "keep it simple, tune later" status as the eventual Cn0-based
-                    // signal-strength label this is standing in for (PROJECT_CONTEXT).
+                    // Live chronometer/signal-strength readout for the Recording-active card,
+                    // refreshed by simple polling of FlightRecordingService's shared fields once
+                    // a second. The signal tier itself is already debounced against jitter inside
+                    // FlightRecordingService (see TIER_CONFIRM_COUNT), so no further smoothing is
+                    // needed here — this just reflects whatever's currently confirmed.
                     var recordingLive by remember { mutableStateOf<RecordingLiveState?>(null) }
                     LaunchedEffect(isRecording) {
                         if (isRecording) {
@@ -86,11 +87,11 @@ class MainActivity : ComponentActivity() {
                                 val elapsedSeconds = if (startMillis > 0) {
                                     (System.currentTimeMillis() - startMillis) / 1000
                                 } else 0L
-                                val satellites = FlightRecordingService.latestSatellitesUsedShared
+                                val signalTier = FlightRecordingService.latestSignalTierShared
                                 recordingLive = RecordingLiveState(
                                     elapsedText = formatElapsed(elapsedSeconds),
-                                    satellitesText = if (satellites != null) {
-                                        "GPS locked · $satellites satellites"
+                                    signalText = if (signalTier != null) {
+                                        "GPS signal: ${signalTier.label}"
                                     } else {
                                         "Acquiring GPS…"
                                     }
