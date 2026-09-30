@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.ma.skydivegps.data.FlightFileStorage
 import com.ma.skydivegps.data.FlightLogger
 import com.ma.skydivegps.data.FlightPoint
+import com.ma.skydivegps.data.LandingDetector
 import com.ma.skydivegps.sensors.BarometerTracker
 import com.ma.skydivegps.sensors.GnssStatusTracker
 import com.ma.skydivegps.sensors.LocationTracker
@@ -30,13 +31,24 @@ class FlightRecordingService : Service() {
 
     private var recordingStartTimeMillis: Long = 0L
 
+    // Set once a sustained landing is confirmed (see checkForLanding below), so a single flight
+    // only ever schedules landingAutoStopRunnable once — re-scanning after that point would just
+    // keep re-detecting the same landing and re-posting the same delayed stop.
+    private var landingDetected: Boolean = false
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val autoStopRunnable = Runnable {
-        // Phase 1 hard ceiling: no landing-detection logic, just stop and save so an unattended
-        // recording can't run indefinitely (the wake-lock's 1-hour cap only frees the CPU wake
-        // lock — it never stopped or saved anything). Invisible/background for now; whether to
-        // surface this to the user (e.g. a countdown) is an open design-thread question, not part
-        // of this fix.
+        // Hard ceiling, independent of landing detection below: if detection never fires (a false
+        // negative, or genuinely continuous post-landing motion — see LandingDetector's real-data
+        // validation notes), this still guarantees an unattended recording can't run forever. An
+        // OR with landingAutoStopRunnable, not a replacement for it — whichever fires first wins,
+        // since onDestroy() tears down both callbacks together.
+        stopSelf()
+    }
+    private val landingAutoStopRunnable = Runnable {
+        // Fires RECORDER_BUFFER_SECONDS after a sustained landing was confirmed (real post-landing
+        // housekeeping time — securing the canopy, camera, walking — before the recording actually
+        // cuts). See checkForLanding() for the detection itself.
         stopSelf()
     }
     private val notificationTickRunnable = object : Runnable {
@@ -78,7 +90,42 @@ class FlightRecordingService : Service() {
                 avgSignalDb = latestAvgSignalDb
             )
             FlightLogger.addPoint(point)
+            checkForLanding()
         }
+    }
+
+    /**
+     * Re-runs the full batch landing classification against every point logged so far, and
+     * schedules the conservative auto-stop the first time a sustained landing is confirmed.
+     *
+     * Re-scanning from scratch on every single point (rather than an incremental/streaming state
+     * machine) is deliberate: LandingDetector's smoothing window looks both forward and backward
+     * in time, which is straightforward for a finished CSV but awkward to do incrementally without
+     * introducing new streaming-specific bugs. A real flight tops out around ~1500 points, so an
+     * O(n) rescan per point is computationally trivial and reuses the exact same detector logic
+     * that's already validated against real flight data (both in the viewer and standalone here).
+     */
+    private fun checkForLanding() {
+        if (landingDetected) return
+
+        val points = FlightLogger.getPoints()
+        val phases = LandingDetector.classifyPhases(points)
+        // Only look for a landing once deployment is confirmed — otherwise a stationary period
+        // before takeoff (taxiing, waiting on the ground) could itself satisfy the sustain check.
+        if (!phases.hasDeployment) return
+
+        val landingIdx = LandingDetector.detectLanding(
+            points,
+            phases.deployOnsetIdx,
+            LandingDetector.RECORDER_SUSTAIN_SECONDS
+        )
+        if (landingIdx == -1) return
+
+        landingDetected = true
+        mainHandler.postDelayed(
+            landingAutoStopRunnable,
+            (LandingDetector.RECORDER_BUFFER_SECONDS * 1000L).toLong()
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -108,9 +155,8 @@ class FlightRecordingService : Service() {
         ).apply {
             setReferenceCounted(false)
             acquire(60 * 60 * 1000L) // safety cap only — auto-releases the wake lock after 1 hour;
-                                      // actually stopping/saving the recording is now handled by
-                                      // autoStopRunnable above (phase 1: fixed ceiling; a later
-                                      // phase can replace this with real landing detection)
+                                      // actually stopping/saving the recording is handled by
+                                      // autoStopRunnable / landingAutoStopRunnable above
         }
 
         barometerTracker.start()
@@ -123,6 +169,7 @@ class FlightRecordingService : Service() {
         super.onDestroy()
         isRunning = false
         mainHandler.removeCallbacks(autoStopRunnable)
+        mainHandler.removeCallbacks(landingAutoStopRunnable)
         mainHandler.removeCallbacks(notificationTickRunnable)
         locationTracker.stop()
         barometerTracker.stop()
@@ -173,10 +220,10 @@ class FlightRecordingService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 1
         // 40 min: based on the user's actual jump log, real jumps run ~20-25 min take-off to
-        // landing, so this gives real margin. Short-term fallback only — once landing-detection
-        // auto-stop ships (blocked on real flight data), this becomes an OR with it rather than
-        // being replaced: whichever fires first stops the recording, so an unattended recording
-        // still can't run forever if detection has a false negative.
+        // landing, so this gives real margin. An OR with landing-detection auto-stop
+        // (see FlightRecordingService.checkForLanding / landingAutoStopRunnable), not a
+        // replacement for it — whichever fires first stops the recording, so an unattended
+        // recording still can't run forever if detection has a false negative.
         private const val AUTO_STOP_MS = 40 * 60 * 1000L
         private const val NOTIFICATION_UPDATE_INTERVAL_MS = 60_000L
 
