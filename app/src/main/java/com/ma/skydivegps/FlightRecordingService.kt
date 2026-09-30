@@ -63,10 +63,18 @@ class FlightRecordingService : Service() {
     }
     private val notificationTickRunnable = object : Runnable {
         override fun run() {
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(NOTIFICATION_ID, buildNotification())
+            refreshNotification()
             mainHandler.postDelayed(this, NOTIFICATION_UPDATE_INTERVAL_MS)
         }
+    }
+
+    // Pulled out of notificationTickRunnable so the signal-strength confirmation below can also
+    // call it directly — otherwise a newly-confirmed tier would only reach the notification on
+    // the next 60s heartbeat tick, which read as "stuck on acquiring GPS" during any shorter test
+    // (2026-09-30 finding). The Home screen doesn't need this — it already polls every 1s.
+    private fun refreshNotification() {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, buildNotification())
     }
 
     override fun onCreate() {
@@ -94,9 +102,13 @@ class FlightRecordingService : Service() {
                 // Shared alongside the isRunning ground-truth pattern above, so the Home screen
                 // can show a live signal-strength line via simple polling (no bound-service
                 // rearchitecture) — same "keep it simple" status as the rest of this pattern.
-                // The notification (buildNotification below) reads confirmedSignalTier directly
-                // rather than through this shared field, since it's built in this same class.
                 latestSignalTierShared = confirmedSignalTier
+                // Only rebuild the notification here if it's actually showing yet (startForeground
+                // may not have run for the very first tier confirmation if GNSS status updates
+                // arrive unusually fast) — startForeground/onStartCommand always follows up with
+                // its own buildNotification() call regardless, so this is just for every
+                // confirmation after that first one.
+                if (isRunning) refreshNotification()
             }
         }
 

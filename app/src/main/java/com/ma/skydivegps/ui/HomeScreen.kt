@@ -121,9 +121,19 @@ fun TailwindHomeScreen(
             )
     ) {
         if (splashAlpha > 0.001f) {
+            // fillMaxWidth() here is the actual fix for the tagline's centering bug (2026-09-30):
+            // previously this Column had no width of its own, so it sized itself to its widest
+            // child, and the tagline's separate `Box(Modifier.width(280.dp))` was centered
+            // relative to THAT auto-sized column width rather than the true screen width the
+            // mark/title appeared to center against -- the two could disagree once the Column's
+            // own intrinsic width (driven by whichever child was widest) didn't match 280dp.
+            // Making the Column span the full screen width means every child (mark image, title,
+            // tagline) is centered against the exact same axis, with no separate width to drift
+            // out of sync.
             Column(
                 modifier = Modifier
                     .align(Alignment.Center)
+                    .fillMaxWidth()
                     .alpha(splashAlpha),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -135,15 +145,14 @@ fun TailwindHomeScreen(
                 Spacer(Modifier.height(6.dp))
                 Text3("Tailwind", Color.White, 38.sp, FontWeight.ExtraBold)
                 Spacer(Modifier.height(20.dp))
-                Box(modifier = Modifier.width(280.dp)) {
-                    Text3(
-                        "Wingsuit flight tracking\n& playback",
-                        Color.White,
-                        15.sp,
-                        FontWeight.Normal,
-                        align = TextAlign.Center
-                    )
-                }
+                Text3(
+                    "Wingsuit flight tracking\n& playback",
+                    Color.White,
+                    15.sp,
+                    FontWeight.Normal,
+                    align = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp)
+                )
             }
 
             val infiniteTransition = rememberInfiniteTransition(label = "tapHint")
@@ -384,7 +393,8 @@ private fun Text3(
     weight: FontWeight,
     align: TextAlign = TextAlign.Start,
     mono: Boolean = false,
-    decoration: TextDecoration? = null
+    decoration: TextDecoration? = null,
+    modifier: Modifier = Modifier
 ) {
     Text(
         text = text,
@@ -394,6 +404,7 @@ private fun Text3(
         textAlign = align,
         fontFamily = if (mono) IBMPlexMono else null,
         textDecoration = decoration,
-        letterSpacing = if (weight == FontWeight.Bold || weight == FontWeight.ExtraBold) 0.4.sp else 0.sp
+        letterSpacing = if (weight == FontWeight.Bold || weight == FontWeight.ExtraBold) 0.4.sp else 0.sp,
+        modifier = modifier
     )
 }

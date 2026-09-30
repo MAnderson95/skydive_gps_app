@@ -1027,19 +1027,34 @@ function runViewer(FLIGHT_DATA, FLIGHT_META, mapImageDataUri, mapMeta){
     mapTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     mapTex.wrapT = THREE.RepeatWrapping;
     mapTex.wrapS = THREE.RepeatWrapping;
-    // No repeat.x/repeat.y flip needed: THREE.Texture defaults to flipY=true
-    // (image top row -> v=1), PlaneGeometry maps v=1 to local +Y, and the
-    // plane's rotation.x=-Math.PI/2 below sends local +Y to world -Z -- which
-    // is exactly "north" in this app's local-frame convention (z is more
-    // negative further north). Local +X already maps straight to world +X
-    // (east), matching the image's left-to-right = west-to-east layout. So
-    // the untouched default orientation already lines up correctly; a
-    // previous version of this file forced repeat.x=-1 and repeat.y=-1 here
-    // (a 180-degree flip, tuned against an older placeholder test image),
-    // which caused a real satellite image to render rotated 180 degrees out
-    // of alignment with the flight path -- found and fixed 2026-09-27,
-    // confirmed against the user's own marked-up satellite image first in a
-    // private test artifact before porting the fix here.
+    // 180-degree flip REQUIRED here (both axes) -- re-added 2026-09-30, and
+    // this is not just reverting the 2026-09-27 "fix" below; the underlying
+    // math actually changed since then. Without this flip: THREE.Texture's
+    // default flipY=true (image top row -> v=1) + PlaneGeometry (v=1 ->
+    // local +Y) + this mesh's rotation.x=-Math.PI/2 (local +Y -> world -Z)
+    // together mean world -Z ends up = north, and (rotation doesn't touch X)
+    // world +X ends up = east -- IF the flight-path data being rendered also
+    // uses x=east-positive/z=south-positive. It doesn't: FlightGeoUtils.kt
+    // (written 2026-09-29, the real Kotlin source of the x/y/z rows below)
+    // deliberately uses the OPPOSITE convention on both axes -- x=west-
+    // positive, z=north-positive (see its own axis-convention comment,
+    // validated against real flight data 2026-09-21, chosen for a
+    // right-handed frame with y=up/z=north) -- and those rows are fed
+    // straight into Vector3 with no sign correction (see `z:p[2]` etc.
+    // above). So the unflipped texture and the real flight-path data
+    // disagree on both compass axes at once, which renders as the flight
+    // landing in the exact opposite (diagonal) map quadrant from where it
+    // should -- confirmed 2026-09-30 against real live (non-cached) map
+    // imagery. This repeat.x=-1/repeat.y=-1 flip corrects for that. The
+    // 2026-09-27 investigation that removed this same flip was real and not
+    // wrong for what it tested -- it was run before FlightGeoUtils.kt
+    // existed, almost certainly against test data using a different (more
+    // "default") axis convention than the Kotlin port ended up choosing two
+    // days later. Do not remove this again without re-deriving against
+    // FlightGeoUtils.kt's actual x=west/z=north convention, not just
+    // re-testing "does it look aligned" against one image.
+    mapTex.repeat.x = -1;
+    mapTex.repeat.y = -1;
     const mapGeo = new THREE.PlaneGeometry(mapMeta.widthMeters, mapMeta.heightMeters);
     const mapMat = new THREE.MeshBasicMaterial({map: mapTex});
     const mapMesh = new THREE.Mesh(mapGeo, mapMat);
